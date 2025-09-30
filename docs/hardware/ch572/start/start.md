@@ -2,13 +2,13 @@
 
 ## Foreword
 According to the datasheet, the CH572 was made "for 2.4G wireless communication applications and simple Bluetooth applications with low pin count"
-This is nowhere near the full picture. this is one of the greatest microcontroller in existence. 
+This is a vast understatement, as this is one of the most cost effective chips ever.
 
 ## Features 
-
+The CH572 features 256kb of flash and 12kb of ram, bluetooth and 2.4ghz rf, I2C, SPI, PWM, GPIO, 
 ### CH570 vs CH572
 The only difference is that the 72 support BLE 5.0. This is solely due to the code being allowed to run on it, **if you are using the ch32fun library, there is <u> NO DIFFERENCE </u> between the 2 chips** <br>
-## Useful Links
+
 
 ## Software
 
