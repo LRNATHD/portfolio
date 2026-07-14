@@ -1,0 +1,51 @@
+RULES
+====
+1. Gallery is the centerpiece component — keep premium quality
+2. gallery.js exports: createGallery(containerEl, projects), destroyGallery(), openProject(projectId)
+3. Uses marked for markdown rendering — already in package.json
+4. CSS uses BEM naming: gallery__card, gallery__detail, etc.
+5. CSS custom props fallback to design system vars (--font-body, --color-text, etc.)
+6. Dark mode only: bg #0a0a0f, accent #00d4ff
+7. Zoom uses transform scale() + translate() anchored to card position
+8. Detail panel physically attached to zoomed card via connector line
+9. Mobile: detail panel becomes bottom sheet
+10. All transitions use cubic-bezier(0.22, 1, 0.36, 1) for premium feel
+11. Deep linking via URL hash: #/projects/{projectId}
+
+KEY INFO
+====
+| File                     | Purpose                                    |
+| gallery.js               | Gallery component — zoom interaction logic |
+| ../styles/gallery.css    | All gallery styles, BEM, responsive        |
+
+| Data field   | Type     | Notes                      |
+| id           | string   | Unique slug                |
+| title        | string   | Display name               |
+| thumbnail    | string   | Path to thumbnail image    |
+| description  | string   | Markdown content           |
+| images       | string[] | Additional image paths     |
+| tags         | string[] | e.g. KiCad, 4-layer        |
+| date         | string   | ISO date YYYY-MM-DD        |
+
+CSS Z-INDEX STACK
+====
+| Layer      | z-index |
+| Card       | 10      |
+| Overlay    | 100     |
+| Detail     | 200     |
+| Lightbox   | 300     |
+
+COMMANDS
+====
+npm run dev          # Start dev server
+npm run build        # Production build
+
+TROUBLESHOOTING
+====
+SYMPTOM: Card zoom looks jumpy
+CAUSE: transform-origin not reset before recompute
+FIX: Clear transform, read getBoundingClientRect, reapply
+
+SYMPTOM: Detail panel off-screen on resize
+CAUSE: Position computed from stale card rect
+FIX: onResize handler recomputes via requestAnimationFrame

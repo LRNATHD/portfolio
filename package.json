@@ -1,0 +1,19 @@
+{
+  "name": "noahsmith-portfolio",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0"
+  },
+  "dependencies": {
+    "marked": "^15.0.0",
+    "front-matter": "^4.0.2",
+    "highlight.js": "^11.11.0"
+  }
+}

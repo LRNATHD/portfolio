@@ -1,0 +1,120 @@
+/* ============================================================
+   TRANSITIONS
+   Slide, zoom, fade between views
+   ============================================================ */
+
+/* --- Base view state --- */
+.view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg); /* Opaque background to prevent see-through overlapping during transitions */
+}
+
+/* --- Fade --- */
+.view.fade-enter {
+  opacity: 0;
+}
+.view.fade-enter-active {
+  opacity: 1;
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+.view.fade-exit {
+  opacity: 1;
+}
+.view.fade-exit-active {
+  opacity: 0;
+  transition: opacity var(--duration-normal) ease;
+}
+
+/* --- Slide Left (entering from right) --- */
+.view.slide-left-enter {
+  opacity: 0;
+  transform: translateX(80px);
+}
+.view.slide-left-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--duration-slow) var(--ease-out),
+              transform var(--duration-slow) var(--ease-out);
+}
+.view.slide-left-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+.view.slide-left-exit-active {
+  opacity: 0;
+  transform: translateX(-80px);
+  transition: opacity var(--duration-normal) ease,
+              transform var(--duration-normal) ease;
+}
+
+/* --- Slide Right (entering from left) --- */
+.view.slide-right-enter {
+  opacity: 0;
+  transform: translateX(-80px);
+}
+.view.slide-right-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--duration-slow) var(--ease-out),
+              transform var(--duration-slow) var(--ease-out);
+}
+.view.slide-right-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+.view.slide-right-exit-active {
+  opacity: 0;
+  transform: translateX(80px);
+  transition: opacity var(--duration-normal) ease,
+              transform var(--duration-normal) ease;
+}
+
+/* --- Zoom In --- */
+.view.zoom-in-enter {
+  opacity: 0;
+  transform: scale(0.92);
+}
+.view.zoom-in-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--duration-cinematic) var(--ease-out),
+              transform var(--duration-cinematic) var(--ease-out);
+}
+.view.zoom-in-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+.view.zoom-in-exit-active {
+  opacity: 0;
+  transform: scale(1.05);
+  transition: opacity var(--duration-normal) ease,
+              transform var(--duration-normal) ease;
+}
+
+/* --- Zoom Out --- */
+.view.zoom-out-enter {
+  opacity: 0;
+  transform: scale(1.08);
+}
+.view.zoom-out-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--duration-cinematic) var(--ease-out),
+              transform var(--duration-cinematic) var(--ease-out);
+}
+.view.zoom-out-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+.view.zoom-out-exit-active {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity var(--duration-normal) ease,
+              transform var(--duration-normal) ease;
+}

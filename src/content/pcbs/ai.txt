@@ -1,0 +1,31 @@
+RULES
+1. Always include valid frontmatter in all PCB markdown files (id, type: pcb, project, title, status, tags, date).
+2. Group files under their respective chip or subproject folder.
+3. Ensure the project field matches an existing project id.
+
+====
+KEY INFO
+Field | Description
+id | Unique identifier matching filename
+type | Must be "pcb"
+project | ID of parent project
+title | Display title
+status | E.g. "Complete" or "In Progress"
+tags | Manufacturing method, chip, etc.
+
+====
+TEMPLATES
+```markdown
+---
+id: example-board
+type: pcb
+project: parent-project-id
+title: Example Board
+status: Complete
+tags:
+  - PCB Milling
+date: '2025-06-01'
+---
+
+Description here.
+```

@@ -1,0 +1,33 @@
+RULES
+====
+1. Dark mode only — bg #0a0a0f, surfaces #111118
+2. Accent color: #00d4ff (cyan/electric blue)
+3. Fonts: Inter (body), JetBrains Mono (mono) — loaded via Google Fonts in index.html
+4. Use CSS custom properties for all design tokens
+5. BEM naming convention: block__element--modifier
+6. gallery.css is the largest stylesheet — premium quality required
+7. Reduced-motion media query required on all animation
+8. Mobile breakpoint: 768px
+
+KEY INFO
+====
+| File             | Purpose                                |
+| gallery.css      | Gallery component — cards, zoom, detail |
+| global.css       | Design tokens, resets (not yet created) |
+| home.css         | Home page (not yet created)             |
+| writing.css      | Blog/writing page (not yet created)     |
+| transitions.css  | Page transitions (not yet created)      |
+
+DESIGN TOKENS (expected in global.css)
+====
+--color-bg: #0a0a0f
+--color-surface: #111118
+--color-surface-hover: #16161f
+--color-border: rgba(255, 255, 255, 0.06)
+--color-border-hover: rgba(255, 255, 255, 0.12)
+--color-accent: #00d4ff
+--color-text: #e8e8ed
+--color-text-dim: #8888a0
+--color-text-muted: #555568
+--font-body: 'Inter', sans-serif
+--font-mono: 'JetBrains Mono', monospace

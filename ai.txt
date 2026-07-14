@@ -1,0 +1,39 @@
+RULES
+====
+1. This is a Vite vanilla JS SPA — no frameworks
+2. Hash-based routing (#/path) — see src/router.js
+3. All CSS uses custom properties from src/styles/global.css
+4. Gallery is the centerpiece — see src/components/gallery.js
+5. Markdown content lives in content/ with YAML front matter
+6. Dark mode only (--color-bg: #0a0a0f)
+7. Accent color: #00d4ff (cyan)
+8. Deploy via GitHub Pages — CI builds dist/
+
+KEY INFO
+====
+| Item          | Value                                    |
+| Domain        | noahsmith.dev                            |
+| Build tool    | Vite 6.x                                 |
+| Entry point   | index.html → src/main.js                 |
+| Router        | src/router.js (hash-based)               |
+| Views         | src/views/ (home, projects, writing)     |
+| Components    | src/components/ (gallery)                |
+| Styles        | src/styles/ (global, home, gallery, etc) |
+| Content       | content/ (markdown files)                |
+| CI            | .github/workflows/ci.yml                |
+| Fonts         | Inter, JetBrains Mono (Google Fonts)     |
+
+COMMANDS
+====
+npm run dev        # start dev server
+npm run build      # build to dist/
+npm run preview    # preview production build
+
+CHECKLIST
+====
+[ ] Replace demo project data with real PCB projects
+[ ] Add real project thumbnail images
+[ ] Add more writing content
+[ ] Flesh out homepage design
+[ ] Add custom markdown editor view
+[ ] Generate placeholder images for demo projects

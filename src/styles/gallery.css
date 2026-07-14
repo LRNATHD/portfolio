@@ -1,0 +1,741 @@
+/* ============================================================
+   GALLERY — PCB Project Showcase
+   Premium zoom-from-origin gallery for hardware portfolio
+   ============================================================ */
+
+/* --- Custom properties (fallbacks for design system) --- */
+.gallery {
+  --gallery-bg: var(--color-bg, #0a0a0f);
+  --gallery-card-bg: var(--color-surface, #111118);
+  --gallery-card-bg-hover: var(--color-surface-hover, #16161f);
+  --gallery-border: var(--color-border, rgba(255, 255, 255, 0.06));
+  --gallery-border-hover: var(--color-border-hover, rgba(255, 255, 255, 0.12));
+  --gallery-accent: var(--color-accent, #00d4ff);
+  --gallery-accent-glow: var(--color-accent-glow, rgba(0, 212, 255, 0.15));
+  --gallery-accent-subtle: var(--color-accent-subtle, rgba(0, 212, 255, 0.06));
+  --gallery-text: var(--color-text, #e8e8ed);
+  --gallery-text-dim: var(--color-text-dim, #8888a0);
+  --gallery-text-muted: var(--color-text-muted, #555568);
+  --gallery-font-body: var(--font-body, 'Inter', -apple-system, sans-serif);
+  --gallery-font-mono: var(--font-mono, 'JetBrains Mono', monospace);
+  --gallery-radius: 10px;
+  --gallery-radius-lg: 14px;
+  --gallery-transition-fast: 180ms;
+  --gallery-transition: 380ms;
+  --gallery-transition-slow: 520ms;
+  --gallery-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --gallery-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --gallery-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --gallery-z-card: 10;
+  --gallery-z-overlay: 100;
+  --gallery-z-detail: 200;
+  --gallery-z-lightbox: 300;
+}
+
+/* --- Gallery container --- */
+.gallery {
+  position: relative;
+  width: 100%;
+  min-height: 60vh;
+  padding: 2rem 0;
+  font-family: var(--gallery-font-body);
+  color: var(--gallery-text);
+}
+
+/* --- Grid layout --- */
+.gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  padding: 2rem 1rem;
+  transition: opacity var(--gallery-transition) var(--gallery-ease),
+              transform var(--gallery-transition) var(--gallery-ease);
+}
+
+@media (min-width: 900px) {
+  .gallery__grid {
+    gap: 2rem;
+    padding: 2rem;
+  }
+}
+
+.gallery__section-header {
+  grid-column: 1 / -1;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gallery-text);
+  margin: 2rem 0 1rem 0;
+  border-bottom: 1px solid var(--gallery-border);
+  padding-bottom: 0.5rem;
+  font-family: var(--gallery-font-body);
+}
+
+/* When a card is zoomed, dim/shift the rest of the grid */
+.gallery--has-active .gallery__grid {
+  pointer-events: none;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.gallery__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--gallery-card-bg);
+  border: 1px solid var(--gallery-border);
+  border-radius: var(--gallery-radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  will-change: transform, box-shadow;
+  transition:
+    transform var(--gallery-transition) var(--gallery-ease),
+    box-shadow var(--gallery-transition) var(--gallery-ease),
+    border-color var(--gallery-transition-fast) ease;
+  /* transform-origin is set dynamically via JS */
+  transform-origin: center center;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Gradient accent border — top edge only */
+.gallery__card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--gallery-accent) 30%,
+    var(--gallery-accent) 70%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity var(--gallery-transition-fast) ease;
+  z-index: 2;
+}
+
+/* Hover: lift + glow */
+.gallery__card:hover {
+  transform: translateY(-4px) scale(1.008);
+  border-color: var(--gallery-border-hover);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px var(--gallery-border-hover),
+    0 0 40px var(--gallery-accent-subtle);
+}
+
+.gallery__card:hover::before {
+  opacity: 1;
+}
+
+/* Focus visible */
+.gallery__card:focus-visible {
+  outline: 2px solid var(--gallery-accent);
+  outline-offset: 3px;
+}
+
+/* Thumbnail wrapper */
+.gallery__card-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--color-bg-elevated);
+}
+
+.gallery__card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--gallery-transition-slow) var(--gallery-ease);
+}
+
+.gallery__card:hover .gallery__card-image img {
+  transform: scale(1.04);
+}
+
+/* Scanline overlay — subtle CRT/engineering aesthetic */
+.gallery__card-image::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Card body */
+.gallery__card-body {
+  padding: 1rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  flex: 1;
+}
+
+.gallery__card-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--gallery-text);
+  margin: 0;
+}
+
+/* Tag row */
+.gallery__card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: var(--space-md);
+}
+
+.gallery__tag {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.gallery__badge {
+  font-size: var(--text-xs);
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+}
+
+.gallery__badge--status {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="light"] .gallery__badge--status {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+/* Date stamp */
+.gallery__card-date {
+  font-family: var(--gallery-font-mono);
+  font-size: 0.6875rem;
+  color: var(--gallery-text-muted);
+  letter-spacing: 0.04em;
+  margin-top: auto;
+}
+
+/* ============================================================
+   CARD ZOOM STATE
+   ============================================================ */
+
+/* The actively zoomed card */
+.gallery__card--active {
+  position: relative;
+  z-index: var(--gallery-z-card);
+  cursor: default;
+  pointer-events: auto;
+  border-color: var(--gallery-accent);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 1px var(--gallery-accent),
+    0 0 80px var(--gallery-accent-glow);
+}
+
+.gallery__card--active::before {
+  opacity: 1;
+}
+
+.gallery__card--active .gallery__card-image img {
+  transform: scale(1);
+}
+
+/* Non-active cards when one is zoomed — subtle fade */
+.gallery--has-active .gallery__card:not(.gallery__card--active) {
+  filter: blur(10px) brightness(0.5);
+  transform: scale(0.95);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Prevent injected cards inside the detail panel from being blurred */
+.gallery__detail .gallery__card {
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* ============================================================
+   BACKDROP OVERLAY
+   ============================================================ */
+.gallery__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: var(--gallery-z-overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--gallery-transition) var(--gallery-ease);
+}
+
+.gallery__backdrop--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ============================================================
+   DETAIL PANEL
+   Full-screen split layout
+   ============================================================ */
+.gallery__detail {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gallery-z-detail);
+  background: rgba(10, 10, 15, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(20px);
+  transition:
+    opacity var(--gallery-transition) var(--gallery-ease),
+    transform var(--gallery-transition) var(--gallery-ease);
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery__detail--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.gallery__detail-split {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.gallery__detail-left {
+  flex: 0 0 40vw; /* 40% width for images */
+  border-right: 1px solid var(--gallery-border);
+  overflow-y: auto;
+  padding: 3rem 2rem;
+  scrollbar-width: thin;
+}
+
+.gallery__detail-right {
+  flex: 1; /* remaining 60% for text */
+  overflow-y: auto;
+  padding: 3rem 4rem;
+  scrollbar-width: thin;
+  background: var(--gallery-card-bg);
+}
+
+
+
+/* Detail header */
+.gallery__detail-header {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--gallery-border);
+  margin-bottom: 1.5rem;
+}
+
+.gallery__detail-title {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--gallery-text);
+  margin: 0 0 0.75rem;
+}
+
+.gallery__detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.gallery__detail-date {
+  font-family: var(--gallery-font-mono);
+  font-size: 0.75rem;
+  color: var(--gallery-text-dim);
+  letter-spacing: 0.04em;
+}
+
+.gallery__detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+/* Detail body — scrollable content */
+.gallery__detail-body {
+  /* We don't need flex scroll behavior here because .gallery__detail-right is the scrollable container now */
+}
+
+.gallery__detail-body::-webkit-scrollbar {
+  width: 5px;
+}
+.gallery__detail-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.gallery__detail-body::-webkit-scrollbar-thumb {
+  background: var(--gallery-text-muted);
+  border-radius: 3px;
+}
+
+/* Markdown content in detail body */
+.gallery__detail-description {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--gallery-text-dim);
+}
+
+.gallery__detail-description p {
+  margin: 0 0 1em;
+}
+
+.gallery__detail-description strong {
+  color: var(--gallery-text);
+  font-weight: 600;
+}
+
+.gallery__detail-description code {
+  font-family: var(--gallery-font-mono);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  color: var(--gallery-accent);
+}
+
+.gallery__detail-description a {
+  color: var(--gallery-accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+  transition: border-color var(--gallery-transition-fast) ease;
+}
+.gallery__detail-description a:hover {
+  border-bottom-color: var(--gallery-accent);
+}
+
+.gallery__detail-description ul,
+.gallery__detail-description ol {
+  padding-left: 1.25em;
+  margin: 0 0 1em;
+}
+
+.gallery__detail-description li {
+  margin-bottom: 0.35em;
+}
+
+.gallery__detail-description h1,
+.gallery__detail-description h2,
+.gallery__detail-description h3,
+.gallery__detail-description h4 {
+  color: var(--gallery-text);
+  margin: 1.5em 0 0.5em;
+  font-weight: 600;
+}
+.gallery__detail-description h1:first-child,
+.gallery__detail-description h2:first-child,
+.gallery__detail-description h3:first-child {
+  margin-top: 0;
+}
+
+/* Image gallery inside detail */
+.gallery__detail-images {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.gallery__detail-full-img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--gallery-radius);
+  border: 1px solid var(--gallery-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: transform var(--gallery-transition-fast) ease,
+              border-color var(--gallery-transition-fast) ease;
+}
+
+.gallery__detail-full-img:hover {
+  transform: scale(1.02);
+  border-color: var(--gallery-accent-subtle);
+}
+
+.gallery__detail-full-img:hover {
+  opacity: 0.95;
+}
+
+/* KiCanvas Embedding */
+.gallery__detail-kicad {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 2rem;
+}
+
+.kicanvas-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kicanvas-title {
+  font-family: var(--gallery-font-mono);
+  font-size: 0.8rem;
+  color: var(--gallery-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+kicanvas-embed {
+  width: 100%;
+  height: 500px;
+  background: var(--gallery-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Close button */
+.gallery__close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--gallery-border);
+  border-radius: 6px;
+  color: var(--gallery-text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background var(--gallery-transition-fast) ease,
+    color var(--gallery-transition-fast) ease,
+    border-color var(--gallery-transition-fast) ease;
+  z-index: 5;
+}
+
+.gallery__close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--gallery-text);
+  border-color: var(--gallery-border-hover);
+}
+
+.gallery__close:focus-visible {
+  outline: 2px solid var(--gallery-accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   LIGHTBOX — Full-size image viewer
+   ============================================================ */
+.gallery__lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gallery-z-lightbox);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 2, 6, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--gallery-transition) var(--gallery-ease);
+  cursor: zoom-out;
+}
+
+.gallery__lightbox--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gallery__lightbox img {
+  max-width: 92vw;
+  max-height: 88vh;
+  border-radius: var(--gallery-radius);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.7);
+  object-fit: contain;
+  transform: scale(0.92);
+  transition: transform var(--gallery-transition) var(--gallery-ease-out);
+}
+
+.gallery__lightbox--visible img {
+  transform: scale(1);
+}
+
+.gallery__lightbox-close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--gallery-text-dim);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition:
+    background var(--gallery-transition-fast) ease,
+    color var(--gallery-transition-fast) ease;
+}
+
+.gallery__lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--gallery-text);
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.gallery__empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.gallery__empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+}
+
+.gallery__empty-text {
+  font-size: 1rem;
+  color: var(--gallery-text-muted);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   RESPONSIVE — Mobile detail panel stacks below
+   ============================================================ */
+@media (max-width: 768px) {
+  .gallery__grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+    padding: 0 0.75rem;
+  }
+
+  .gallery__detail-split {
+    flex-direction: column;
+  }
+  .gallery__detail-left {
+    flex: none;
+    height: 40vh; /* on mobile, image takes top half */
+    padding: 1rem;
+    border-right: none;
+    border-bottom: 1px solid var(--gallery-border);
+  }
+  .gallery__detail-right {
+    padding: 1.5rem;
+  }
+}
+
+/* ============================================================
+   ENTRANCE ANIMATIONS
+   ============================================================ */
+@keyframes galleryCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.gallery__card {
+  animation: galleryCardIn var(--gallery-transition-slow) var(--gallery-ease-out) both;
+}
+
+/* Stagger entrance */
+.gallery__card:nth-child(1)  { animation-delay: 0ms; }
+.gallery__card:nth-child(2)  { animation-delay: 60ms; }
+.gallery__card:nth-child(3)  { animation-delay: 120ms; }
+.gallery__card:nth-child(4)  { animation-delay: 180ms; }
+.gallery__card:nth-child(5)  { animation-delay: 240ms; }
+.gallery__card:nth-child(6)  { animation-delay: 300ms; }
+.gallery__card:nth-child(7)  { animation-delay: 360ms; }
+.gallery__card:nth-child(8)  { animation-delay: 420ms; }
+.gallery__card:nth-child(9)  { animation-delay: 480ms; }
+.gallery__card:nth-child(10) { animation-delay: 540ms; }
+.gallery__card:nth-child(11) { animation-delay: 600ms; }
+.gallery__card:nth-child(12) { animation-delay: 660ms; }
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .gallery__card,
+  .gallery__detail,
+  .gallery__backdrop,
+  .gallery__lightbox,
+  .gallery__connector,
+  .gallery__card-image img {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   PRINT
+   ============================================================ */
+@media print {
+  .gallery__backdrop,
+  .gallery__detail,
+  .gallery__lightbox,
+  .gallery__connector {
+    display: none !important;
+  }
+
+  .gallery__card {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+}

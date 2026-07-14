@@ -1,0 +1,28 @@
+RULES
+1. Always include valid frontmatter in all project index.md files (id, type: project, title, status, tags, date).
+2. Store each project in its own subdirectory with an index.md file.
+
+====
+KEY INFO
+Field | Description
+id | Unique identifier matching subdirectory name
+type | Must be "project"
+title | Display title
+status | E.g. "Complete" or "In Progress"
+tags | Project focus, e.g. "Audio", "USB"
+
+====
+TEMPLATES
+```markdown
+---
+id: example-project
+type: project
+title: Example Project
+status: Complete
+tags:
+  - Audio
+date: '2025-06-01'
+---
+
+Description here.
+```
