@@ -10,7 +10,7 @@ id | Unique identifier matching filename
 type | Must be "pcb"
 project | ID of parent project
 title | Display title
-status | E.g. "Complete" or "In Progress"
+status | E.g. "Shelved" or "In Progress"
 tags | Manufacturing method, chip, etc.
 
 ====
@@ -21,7 +21,7 @@ id: example-board
 type: pcb
 project: parent-project-id
 title: Example Board
-status: Complete
+status: Shelved
 tags:
   - PCB Milling
 date: '2025-06-01'

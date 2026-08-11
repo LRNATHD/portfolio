@@ -3,7 +3,7 @@ id: battery-management-board
 type: pcb
 project: miscellaneous-boards
 title: Battery Management Board
-status: Complete
+status: Shelved
 tags:
   - Power
   - Copper Etching

@@ -8,7 +8,7 @@ Field | Description
 id | Unique identifier matching subdirectory name
 type | Must be "project"
 title | Display title
-status | E.g. "Complete" or "In Progress"
+status | E.g. "Shelved" or "In Progress"
 tags | Project focus, e.g. "Audio", "USB"
 
 ====
@@ -18,7 +18,7 @@ TEMPLATES
 id: example-project
 type: project
 title: Example Project
-status: Complete
+status: Shelved
 tags:
   - Audio
 date: '2025-06-01'

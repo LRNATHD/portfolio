@@ -2,7 +2,7 @@
 id: fabacademy-final-project
 type: project
 title: Fab Academy Final Project
-status: Complete
+status: Shelved
 tags:
   - CH572D
   - DRV8835

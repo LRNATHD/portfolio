@@ -14,13 +14,20 @@ export function createTimelineView() {
   const allBoards = Object.entries(pcbFiles)
     .map(([path, rawContent]) => {
       const parsed = fm(rawContent);
-      const { attributes } = parsed;
+      const { attributes, body } = parsed;
+      
+      // Clean up body text for a short snippet
+      let snippet = body ? body.replace(/[#*`_\[\]>]/g, '').trim() : '';
+      if (snippet.length > 120) snippet = snippet.substring(0, 120) + '...';
+
       return {
         id: attributes.id || path.split('/').pop().replace('.md', ''),
         type: attributes.type || 'pcb',
         title: attributes.title || 'Untitled Board',
         thumbnail: attributes.thumbnail || '',
         date: attributes.date || '',
+        tags: attributes.tags || [],
+        description: snippet,
         timestamp: new Date(attributes.date || 0).getTime()
       };
     })
@@ -48,6 +55,12 @@ export function createTimelineView() {
                 </div>
                 <div class="timeline-card-info">
                   <h3>${board.title}</h3>
+                  ${board.tags && board.tags.length > 0 ? `
+                  <div class="timeline-card-tags">
+                    ${board.tags.slice(0, 3).map(tag => `<span class="timeline-tag">${tag}</span>`).join('')}
+                  </div>
+                  ` : ''}
+                  ${board.description ? `<p class="timeline-card-desc">${board.description}</p>` : ''}
                 </div>
               </a>
             </div>

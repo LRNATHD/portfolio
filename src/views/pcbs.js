@@ -23,6 +23,7 @@ const rawPcbs = Object.entries(pcbFiles)
       images: attributes.images || [],
       tags: attributes.tags || [],
       keywords: attributes.keywords || [],
+      featured: attributes.featured || attributes.starred || false,
       kicad: attributes.kicad || [],
       status: attributes.status || null,
       date: attributes.date || '',
@@ -99,6 +100,18 @@ export async function createPcbsView(params) {
     return { ...pcb, description: prefix + pcb.description };
   });
 
+  const featuredPCBs = pcbsWithBanners.filter(p => p.featured && !p.hidden);
+  const regularPCBs = pcbsWithBanners.filter(p => !p.featured || p.hidden);
+  const finalGallery = [];
+
+  if (featuredPCBs.length > 0) {
+    finalGallery.push({ id: 'header-featured', type: 'pcb', isHeader: true, title: 'Featured Boards' });
+    finalGallery.push(...featuredPCBs);
+    finalGallery.push({ id: 'header-all', type: 'pcb', isHeader: true, title: 'All Boards' });
+  }
+
+  finalGallery.push(...regularPCBs);
+
   const el = document.createElement('div');
   el.className = 'pcbs-view view';
   el.innerHTML = `
@@ -115,7 +128,7 @@ export async function createPcbsView(params) {
   requestAnimationFrame(() => {
     const container = el.querySelector('#gallery-container');
     if (container) {
-      currentGallery = createGallery(container, pcbsWithBanners, '/pcbs');
+      currentGallery = createGallery(container, finalGallery, '/pcbs');
 
       // Search listener
       const searchInput = el.querySelector('#gallery-search');

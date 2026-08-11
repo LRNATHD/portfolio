@@ -53,7 +53,7 @@ export function getCurrentRouteName() {
 function getTransition(fromRoute, toRoute) {
   if (!fromRoute) return 'fade';
 
-  const routeOrder = { '/': 0, '/pcbs': 1, '/timeline': 2, '/projects': 3, '/about': 4 };
+  const routeOrder = { '/': 0, '/projects': 1, '/pcbs': 2, '/timeline': 3, '/about': 4 };
   const fromBase = '/' + (fromRoute.split('/')[1] || '');
   const toBase = '/' + (toRoute.split('/')[1] || '');
   const fromIdx = routeOrder[fromBase] ?? 1;

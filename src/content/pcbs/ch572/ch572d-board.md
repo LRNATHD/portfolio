@@ -6,6 +6,7 @@ title: CH572D Board
 kicad:
   - https://raw.githubusercontent.com/LRNATHD/CH572D-Board/main/CH572D-Board/CH572D-Board.kicad_pcb
 status: In Progress
+featured: true
 tags:
   - CH572
 date: '2025-07-10'

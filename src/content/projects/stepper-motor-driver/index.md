@@ -2,7 +2,7 @@
 id: stepper-motor-driver
 type: project
 title: Stepper Motor Driver
-status: Complete
+status: Shelved
 tags:
   - DRV8835
   - Motor Control

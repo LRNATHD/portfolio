@@ -2,7 +2,7 @@
 id: miscellaneous-boards
 type: project
 title: Miscellaneous Boards
-status: Complete
+status: Shelved
 tags:
   - Hardware
   - Prototyping

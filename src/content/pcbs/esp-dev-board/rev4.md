@@ -3,7 +3,7 @@ id: esp-dev-board-rev4
 type: pcb
 project: miscellaneous-boards
 title: ESP Dev Board Rev 4
-status: Complete
+status: Shelved
 tags:
   - ESP32
   - PCB Milling
