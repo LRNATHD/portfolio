@@ -43,7 +43,7 @@ export function navigate(hash) {
  */
 export function getCurrentRouteName() {
   const hash = window.location.hash.slice(1) || '/';
-  const segment = hash.split('/')[1] || 'home';
+  const segment = hash.split('/')[1] || 'projects';
   return segment;
 }
 
@@ -53,7 +53,7 @@ export function getCurrentRouteName() {
 function getTransition(fromRoute, toRoute) {
   if (!fromRoute) return 'fade';
 
-  const routeOrder = { '/': 0, '/projects': 1, '/pcbs': 2, '/timeline': 3, '/about': 4 };
+  const routeOrder = { '/': 0, '/projects': 0, '/pcbs': 1, '/timeline': 2, '/about': 3 };
   const fromBase = '/' + (fromRoute.split('/')[1] || '');
   const toBase = '/' + (toRoute.split('/')[1] || '');
   const fromIdx = routeOrder[fromBase] ?? 1;

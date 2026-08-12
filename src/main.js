@@ -4,19 +4,18 @@
  */
 
 import { addRoute, startRouter } from './router.js';
-import { createHomeView } from './views/home.js';
 import { createPcbsView } from './views/pcbs.js';
 import { createProjectsView } from './views/projects.js';
 import { createTimelineView } from './views/timeline.js';
 import { createAboutView } from './views/about.js';
 
 // Register routes
-addRoute('/', () => createHomeView(), { transition: 'fade', title: 'Home' });
+addRoute('/', (params) => createProjectsView(params), { transition: 'fade', title: 'Projects' });
+addRoute('/projects', (params) => createProjectsView(params), { transition: 'fade', title: 'Projects' });
+addRoute('/projects/:projectId', (params) => createProjectsView(params), { transition: 'zoom-in', title: 'Projects' });
 addRoute('/pcbs', (params) => createPcbsView(params), { transition: 'zoom-in', title: 'PCBs' });
 addRoute('/pcbs/:projectId', (params) => createPcbsView(params), { transition: 'zoom-in', title: 'PCBs' });
 addRoute('/timeline', () => createTimelineView(), { transition: 'zoom-in', title: 'PCB Timeline' });
-addRoute('/projects', (params) => createProjectsView(params), { transition: 'zoom-in', title: 'Projects' });
-addRoute('/projects/:projectId', (params) => createProjectsView(params), { transition: 'zoom-in', title: 'Projects' });
 addRoute('/about', () => createAboutView(), { transition: 'fade', title: 'About' });
 
 // Start
