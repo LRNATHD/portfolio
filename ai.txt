@@ -11,17 +11,18 @@ RULES
 
 KEY INFO
 ====
-| Item          | Value                                    |
-| Domain        | noahsmith.dev                            |
-| Build tool    | Vite 6.x                                 |
-| Entry point   | index.html → src/main.js                 |
-| Router        | src/router.js (hash-based)               |
-| Views         | src/views/ (home, projects, writing)     |
-| Components    | src/components/ (gallery)                |
-| Styles        | src/styles/ (global, home, gallery, etc) |
-| Content       | content/ (markdown files)                |
-| CI            | .github/workflows/ci.yml                |
-| Fonts         | Inter, JetBrains Mono (Google Fonts)     |
+| Item            | Value                                    |
+| Domain          | noahsmith.dev                            |
+| Build tool      | Vite 6.x                                 |
+| Entry point     | index.html                               |
+| Additional page | highschoolfinal/index.html               |
+| Router          | src/router.js (hash-based)               |
+| Views           | src/views/ (home, projects, writing)     |
+| Components      | src/components/ (gallery)                |
+| Styles          | src/styles/ (global, home, gallery, etc) |
+| Content         | content/ (markdown files)                |
+| CI              | .github/workflows/ci.yml                |
+| Fonts           | Inter, JetBrains Mono (Google Fonts)     |
 
 COMMANDS
 ====
@@ -29,8 +30,25 @@ npm run dev        # start dev server
 npm run build      # build to dist/
 npm run preview    # preview production build
 
+TEMPLATES
+====
+[vite_multipage_entry]
+rollupOptions: {
+  input: {
+    main: resolve(__dirname, 'index.html'),
+    highschoolfinal: resolve(__dirname, 'highschoolfinal/index.html'),
+  }
+}
+
+TROUBLESHOOTING
+====
+SYMPTOM: Page /highschoolfinal returns 404 in production build
+CAUSE: Missing from rollupOptions.input in vite.config.js
+FIX: Add highschoolfinal entry to vite.config.js rollupOptions.input
+
 CHECKLIST
 ====
+[x] Add placeholder page for /highschoolfinal
 [ ] Replace demo project data with real PCB projects
 [ ] Add real project thumbnail images
 [ ] Add more writing content
