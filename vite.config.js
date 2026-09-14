@@ -8,7 +8,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        highschoolfinal: resolve(__dirname, 'highschoolfinal/index.html'),
+        'PCB-CNC-Multitool': resolve(__dirname, 'PCB-CNC-Multitool/index.html'),
       },
     },
   },

@@ -1,7 +1,7 @@
 RULES
 ====
-1. High school senior final project page
-2. Standalone HTML entry point bundled via Vite (highschoolfinal/index.html)
+1. High school senior final project page: PCB CNC Multitool
+2. Standalone HTML entry point bundled via Vite (PCB-CNC-Multitool/index.html)
 3. Maintain dark mode aesthetic (#000 background, #e4e4e7 text, #8b8b96 muted)
 4. Use Inter font from Google Fonts
 5. Keep back-link to root domain (noahsmith.dev)
@@ -9,10 +9,10 @@ RULES
 KEY INFO
 ====
 | Item        | Value                                            |
-| URL         | noahsmith.dev/highschoolfinal                    |
-| Entry point | highschoolfinal/index.html                       |
+| URL         | noahsmith.dev/PCB-CNC-Multitool                  |
+| Entry point | PCB-CNC-Multitool/index.html                     |
 | Config      | rollupOptions.input in vite.config.js            |
-| Topic       | High school senior year final hardware project   |
+| Topic       | PCB CNC Multitool (Senior Final Project)         |
 
 COMMANDS
 ====
@@ -27,7 +27,7 @@ TEMPLATES
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Senior Final Project - Noah Smith</title>
+  <title>PCB CNC Multitool - Noah Smith</title>
 </head>
 <body>
 </body>
@@ -35,9 +35,9 @@ TEMPLATES
 
 TROUBLESHOOTING
 ====
-SYMPTOM: 404 Not Found on /highschoolfinal
+SYMPTOM: 404 Not Found on /PCB-CNC-Multitool
 CAUSE: Page missing from rollupOptions.input in vite.config.js
-FIX: Add highschoolfinal entry to rollupOptions.input in vite.config.js
+FIX: Add 'PCB-CNC-Multitool' entry to rollupOptions.input in vite.config.js
 
 CHECKLIST
 ====

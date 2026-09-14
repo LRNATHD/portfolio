@@ -15,7 +15,7 @@ KEY INFO
 | Domain          | noahsmith.dev                            |
 | Build tool      | Vite 6.x                                 |
 | Entry point     | index.html                               |
-| Additional page | highschoolfinal/index.html               |
+| Additional page | PCB-CNC-Multitool/index.html             |
 | Router          | src/router.js (hash-based)               |
 | Views           | src/views/ (home, projects, writing)     |
 | Components      | src/components/ (gallery)                |
@@ -36,19 +36,19 @@ TEMPLATES
 rollupOptions: {
   input: {
     main: resolve(__dirname, 'index.html'),
-    highschoolfinal: resolve(__dirname, 'highschoolfinal/index.html'),
+    'PCB-CNC-Multitool': resolve(__dirname, 'PCB-CNC-Multitool/index.html'),
   }
 }
 
 TROUBLESHOOTING
 ====
-SYMPTOM: Page /highschoolfinal returns 404 in production build
+SYMPTOM: Page /PCB-CNC-Multitool returns 404 in production build
 CAUSE: Missing from rollupOptions.input in vite.config.js
-FIX: Add highschoolfinal entry to vite.config.js rollupOptions.input
+FIX: Add 'PCB-CNC-Multitool' entry to vite.config.js rollupOptions.input
 
 CHECKLIST
 ====
-[x] Add placeholder page for /highschoolfinal
+[x] Add placeholder page for /PCB-CNC-Multitool
 [ ] Replace demo project data with real PCB projects
 [ ] Add real project thumbnail images
 [ ] Add more writing content
