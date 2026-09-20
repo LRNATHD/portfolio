@@ -8,11 +8,505 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* ==========================================================================
+       RealTalk // Thermal Canvas Inlined Styles
+       ========================================================================== */
+    :root {
+      --bg-app: #0d0e12;
+      --bg-surface: #171922;
+      --bg-surface-hover: #222634;
+      --border-color: #272a38;
+      --text-primary: #f0f2f8;
+      --text-secondary: #9095a8;
+      --text-dim: #5c6275;
+      --accent-green: #22c55e;
+      --accent-blue: #3b82f6;
+      --accent-red: #ef4444;
+      --label-bg: #ffffff;
+      --label-text: #000000;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .app-root {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px 16px 32px 16px;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--accent-green);
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      text-transform: uppercase;
+    }
+
+    .live-pill::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    .btn-print {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-green);
+      color: #000000;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
+      transition: all 0.15s ease;
+    }
+
+    .btn-print:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 6px rgba(34, 197, 94, 0.2);
+    }
+
+    .btn-print:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .canvas-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tool-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 44px;
+      padding: 0 16px;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+
+    .tool-btn:hover {
+      background: var(--bg-surface-hover);
+      border-color: #373b4d;
+    }
+
+    .tool-btn:active {
+      transform: scale(0.96);
+    }
+
+    .tool-btn input[type="file"] {
+      display: none;
+    }
+
+    .tool-btn.danger {
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .tool-btn.toggle.active {
+      border-color: rgba(59, 130, 246, 0.5);
+      background: rgba(59, 130, 246, 0.12);
+      color: #93c5fd;
+    }
+
+    .toolbar-separator {
+      width: 1px;
+      height: 24px;
+      background: var(--border-color);
+      margin: 0 4px;
+    }
+
+    .canvas-workspace {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 0;
+      flex: 1;
+    }
+
+    .canvas-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      padding: 8px;
+    }
+
+    .thermal-stage {
+      position: relative;
+      width: 400px;
+      height: 600px;
+      background-color: var(--label-bg);
+      color: var(--label-text);
+      border-radius: var(--radius-md);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px 6px 14px;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #000000;
+      pointer-events: none;
+    }
+
+    .stage-divider-solid {
+      height: 1.5px;
+      background-color: #000000;
+      margin: 0 14px 4px 14px;
+      pointer-events: none;
+    }
+
+    .stage-divider-dashed {
+      height: 1px;
+      background: repeating-linear-gradient(90deg, #000, #000 6px, transparent 6px, transparent 10px);
+      margin: 4px 14px 4px 14px;
+      pointer-events: none;
+    }
+
+    .stage-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 14px 10px 14px;
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      color: #333333;
+      pointer-events: none;
+    }
+
+    .elements-layer {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .canvas-element {
+      position: absolute;
+      cursor: move;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+    }
+
+    .canvas-element.selected {
+      outline: 2px dashed #2563eb;
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    .canvas-text-content {
+      font-family: var(--font-sans);
+      font-weight: 700;
+      color: #000000;
+      min-width: 40px;
+      min-height: 24px;
+      padding: 4px 6px;
+      outline: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: text;
+      -webkit-user-select: text;
+      line-height: 1.25;
+    }
+
+    .canvas-img-content {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      image-rendering: pixelated;
+    }
+
+    .resize-handle {
+      position: absolute;
+      right: -6px;
+      bottom: -6px;
+      width: 16px;
+      height: 16px;
+      background: #2563eb;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      cursor: se-resize;
+      touch-action: none;
+      display: none;
+    }
+
+    .canvas-element.selected .resize-handle {
+      display: block;
+    }
+
+    .workspace-hint {
+      font-size: 12px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-top: 14px;
+      font-family: var(--font-sans);
+    }
+
+    .element-controls {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(23, 25, 34, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 8px 12px;
+      border-radius: 30px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .element-controls.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 15px);
+    }
+
+    .control-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      background: var(--bg-surface-hover);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 50%;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .control-btn:active {
+      transform: scale(0.9);
+    }
+
+    .control-btn.danger {
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .control-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border-color);
+      margin: 0 4px;
+    }
+
+    .status-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+      transition: opacity 0.25s ease;
+    }
+
+    .status-modal.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .modal-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-indicator {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--accent-green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .modal-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      margin-bottom: 18px;
+    }
+
+    .modal-progress-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .modal-progress-bar {
+      width: 25%;
+      height: 100%;
+      background: var(--accent-green);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-job-id {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+    }
+
+    .modal-btn-close {
+      background: var(--bg-surface-hover);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .modal-btn-close.hidden {
+      display: none;
+    }
+
+    @media (max-width: 480px) {
+      .thermal-stage {
+        width: 320px;
+        height: 480px;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="app-root">
-    <!-- Clean Minimalist Header -->
+    <!-- Header -->
     <header class="app-header">
       <div class="header-left">
         <h1 class="app-title">RealTalk</h1>
@@ -26,7 +520,7 @@
       </div>
     </header>
 
-    <!-- Toolbar for iPad & Desktop -->
+    <!-- Toolbar -->
     <nav class="canvas-toolbar">
       <button id="btnAddText" class="tool-btn" type="button">
         <span class="tool-icon">Aa</span>
@@ -60,28 +554,29 @@
     <!-- Canvas Workspace Area -->
     <main class="canvas-workspace">
       <div class="canvas-container" id="canvasContainer">
-        <!-- 4x6" Interactive Thermal Label Stage (Aspect Ratio 2:3, 400x600 px on screen) -->
+        <!-- 4x6" Interactive Thermal Label Stage -->
         <div class="thermal-stage" id="stage">
-          <!-- Permanent aesthetic header -->
-          <div class="stage-header unselectable">
+          <div class="stage-header">
             <span class="stage-title">REALTALK // DESK PRINTER</span>
             <span class="stage-date" id="lblDate">2026-09-20</span>
           </div>
-          <div class="stage-divider-solid unselectable"></div>
+          <div class="stage-divider-solid"></div>
 
-          <!-- Active elements will be appended here dynamically -->
-          <div id="elementsContainer" class="elements-layer"></div>
+          <!-- Active elements container with visible starter text -->
+          <div id="elementsContainer" class="elements-layer">
+            <div class="canvas-element" id="initialElement" style="left: 45px; top: 180px;">
+              <div class="canvas-text-content" contenteditable="true" spellcheck="false" style="font-size: 26px; text-align: center;">Tap to edit text,&#10;or paste an image!</div>
+            </div>
+          </div>
 
-          <!-- Permanent aesthetic footer -->
-          <div class="stage-divider-dashed unselectable"></div>
-          <div class="stage-footer unselectable">
+          <div class="stage-divider-dashed"></div>
+          <div class="stage-footer">
             <span class="stage-device">NULLTONEX Y813BT &bull; 203 DPI</span>
             <span class="stage-loc">* LIVE DESK TRANSMISSION *</span>
           </div>
         </div>
       </div>
 
-      <!-- Quick Tips Hint -->
       <div class="workspace-hint">
         <span>💡 Tap anywhere on label to add text &bull; Paste images with <b>Cmd+V</b> / <b>Ctrl+V</b> &bull; Drag &amp; resize freely</span>
       </div>
@@ -118,6 +613,607 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- Vite Module Link AND Inlined Script for 100% Reliability -->
+  <script type="module" src="./app.js"></script>
+  <script>
+    /* Inlined Fallback Engine */
+    (function () {
+      if (window.__REALTALK_INITIALIZED__) return;
+      window.__REALTALK_INITIALIZED__ = true;
+
+      const WORKER_BASE_URL = 'https://realtalk-printer-bridge.super-disk-489b.workers.dev';
+      const CANVAS_WIDTH = 400;
+      const CANVAS_HEIGHT = 600;
+      const PRINT_WIDTH = 800;
+      const PRINT_HEIGHT = 1200;
+
+      let elements = [];
+      let selectedElement = null;
+      let nextElementId = 2;
+      let isPhotoDither = true;
+      let isSubmitting = false;
+
+      const elementsContainer = document.getElementById('elementsContainer');
+      const btnAddText = document.getElementById('btnAddText');
+      const imageInput = document.getElementById('imageInput');
+      const btnPasteImage = document.getElementById('btnPasteImage');
+      const btnDitherMode = document.getElementById('btnDitherMode');
+      const ditherModeText = document.getElementById('ditherModeText');
+      const btnClear = document.getElementById('btnClear');
+      const btnPrint = document.getElementById('btnPrint');
+
+      const elementControls = document.getElementById('elementControls');
+      const btnSizeDown = document.getElementById('btnSizeDown');
+      const btnSizeUp = document.getElementById('btnSizeUp');
+      const btnAlignLeft = document.getElementById('btnAlignLeft');
+      const btnAlignCenter = document.getElementById('btnAlignCenter');
+      const btnAlignRight = document.getElementById('btnAlignRight');
+      const btnDeleteElem = document.getElementById('btnDeleteElem');
+
+      const statusModal = document.getElementById('statusModal');
+      const modalTitle = document.getElementById('modalTitle');
+      const modalDesc = document.getElementById('modalDesc');
+      const modalProgressBar = document.getElementById('modalProgressBar');
+      const modalJobId = document.getElementById('modalJobId');
+      const modalCloseBtn = document.getElementById('modalCloseBtn');
+      const lblDate = document.getElementById('lblDate');
+
+      if (lblDate) lblDate.textContent = new Date().toISOString().slice(0, 10);
+
+      // Register initial element if present in DOM
+      const initEl = document.getElementById('initialElement');
+      if (initEl) {
+        const contentNode = initEl.querySelector('.canvas-text-content');
+        const record = {
+          id: 'el_1',
+          type: 'text',
+          x: 45,
+          y: 180,
+          fontSize: 26,
+          align: 'center',
+          domNode: initEl,
+          contentNode: contentNode
+        };
+        elements.push(record);
+        attachDragListeners(initEl, record);
+      }
+
+      // Add Text
+      btnAddText.addEventListener('click', (e) => {
+        e.stopPropagation();
+        addTextElement('New text here...', 80, 220, 24, 'center');
+      });
+
+      // Canvas clicks
+      elementsContainer.addEventListener('pointerdown', (e) => {
+        if (e.target === elementsContainer) {
+          deselectAll();
+        }
+      });
+
+      elementsContainer.addEventListener('dblclick', (e) => {
+        if (e.target === elementsContainer) {
+          const rect = elementsContainer.getBoundingClientRect();
+          const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
+          const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
+          addTextElement('Your text', x, y, 22, 'left');
+        }
+      });
+
+      // Image Upload
+      imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) processUploadedFile(file);
+        imageInput.value = '';
+      });
+
+      // Paste button
+      btnPasteImage.addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.read) {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+              const imgType = item.types.find(t => t.startsWith('image/'));
+              if (imgType) {
+                const blob = await item.getType(imgType);
+                processUploadedFile(blob);
+                return;
+              }
+            }
+          }
+          alert("Tip: Press Cmd+V / Ctrl+V to paste any image, or tap 'Add Image' to pick from gallery!");
+        } catch (err) {
+          alert("To paste an image: Press Cmd+V / Ctrl+V, or tap 'Add Image' to choose a photo!");
+        }
+      });
+
+      // Dither toggle
+      btnDitherMode.addEventListener('click', () => {
+        isPhotoDither = !isPhotoDither;
+        if (isPhotoDither) {
+          btnDitherMode.classList.add('active');
+          ditherModeText.textContent = 'Dither: Photo';
+        } else {
+          btnDitherMode.classList.remove('active');
+          ditherModeText.textContent = 'Dither: Sharp';
+        }
+      });
+
+      // Clear Canvas
+      btnClear.addEventListener('click', () => {
+        if (elements.length > 0 && confirm('Clear the label canvas?')) {
+          elements.forEach(el => el.domNode.remove());
+          elements = [];
+          deselectAll();
+        }
+      });
+
+      // Print Button
+      btnPrint.addEventListener('click', handlePrintSubmission);
+
+      // Controls
+      btnSizeDown.addEventListener('click', (e) => { e.stopPropagation(); adjustSelectedSize(-2); });
+      btnSizeUp.addEventListener('click', (e) => { e.stopPropagation(); adjustSelectedSize(2); });
+      btnAlignLeft.addEventListener('click', (e) => { e.stopPropagation(); setSelectedAlign('left'); });
+      btnAlignCenter.addEventListener('click', (e) => { e.stopPropagation(); setSelectedAlign('center'); });
+      btnAlignRight.addEventListener('click', (e) => { e.stopPropagation(); setSelectedAlign('right'); });
+      btnDeleteElem.addEventListener('click', (e) => { e.stopPropagation(); deleteSelectedElement(); });
+      modalCloseBtn.addEventListener('click', () => { statusModal.classList.add('hidden'); });
+
+      // Clipboard global paste
+      window.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+          if (item.type.indexOf('image') === 0) {
+            const blob = item.getAsFile();
+            processUploadedFile(blob);
+            e.preventDefault();
+            break;
+          }
+        }
+      });
+
+      function processUploadedFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const ditheredDataUrl = convertImageToDithered(img, isPhotoDither);
+            addImageElement(ditheredDataUrl, img.width, img.height);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function convertImageToDithered(img, useDither) {
+        const maxDim = 400;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const gray = new Float32Array(w * h);
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+          if (a < 64) {
+            gray[i / 4] = 255;
+          } else {
+            gray[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+          }
+        }
+
+        if (useDither) {
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const idx = y * w + x;
+              const oldVal = gray[idx];
+              const newVal = oldVal < 128 ? 0 : 255;
+              gray[idx] = newVal;
+              const err = oldVal - newVal;
+
+              if (x + 1 < w) gray[idx + 1] += (err * 7) / 16;
+              if (x - 1 >= 0 && y + 1 < h) gray[(y + 1) * w + (x - 1)] += (err * 3) / 16;
+              if (y + 1 < h) gray[(y + 1) * w + x] += (err * 5) / 16;
+              if (x + 1 < w && y + 1 < h) gray[(y + 1) * w + (x + 1)] += (err * 1) / 16;
+            }
+          }
+        } else {
+          for (let i = 0; i < gray.length; i++) {
+            gray[i] = gray[i] < 128 ? 0 : 255;
+          }
+        }
+
+        for (let i = 0; i < gray.length; i++) {
+          const v = gray[i] < 128 ? 0 : 255;
+          const idx = i * 4;
+          data[idx] = v;
+          data[idx + 1] = v;
+          data[idx + 2] = v;
+          data[idx + 3] = 255;
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        return c.toDataURL('image/png');
+      }
+
+      function addTextElement(text, x, y, fontSize, align) {
+        fontSize = fontSize || 24;
+        align = align || 'center';
+        const id = 'el_' + nextElementId++;
+        const el = document.createElement('div');
+        el.className = 'canvas-element';
+        el.dataset.id = id;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+
+        const content = document.createElement('div');
+        content.className = 'canvas-text-content';
+        content.contentEditable = 'true';
+        content.spellcheck = false;
+        content.style.fontSize = fontSize + 'px';
+        content.style.textAlign = align;
+        content.innerText = text;
+
+        el.appendChild(content);
+        elementsContainer.appendChild(el);
+
+        const record = { id, type: 'text', x, y, fontSize, align, domNode: el, contentNode: content };
+        elements.push(record);
+
+        attachDragListeners(el, record);
+        selectElement(record);
+        content.focus();
+        return record;
+      }
+
+      function addImageElement(dataUrl, origW, origH) {
+        const id = 'el_' + nextElementId++;
+        const el = document.createElement('div');
+        el.className = 'canvas-element';
+        el.dataset.id = id;
+
+        const maxInitW = 220;
+        let w = origW;
+        let h = origH;
+        if (w > maxInitW) {
+          h = Math.round((h * maxInitW) / w);
+          w = maxInitW;
+        }
+
+        const x = Math.max(10, Math.round((CANVAS_WIDTH - w) / 2));
+        const y = Math.max(10, Math.round((CANVAS_HEIGHT - h) / 2));
+
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        el.style.width = w + 'px';
+        el.style.height = h + 'px';
+
+        const img = document.createElement('img');
+        img.className = 'canvas-img-content';
+        img.src = dataUrl;
+
+        const handle = document.createElement('div');
+        handle.className = 'resize-handle';
+
+        el.appendChild(img);
+        el.appendChild(handle);
+        elementsContainer.appendChild(el);
+
+        const record = {
+          id, type: 'image', x, y, width: w, height: h,
+          aspectRatio: origW / origH, dataUrl, domNode: el, imgNode: img
+        };
+        elements.push(record);
+
+        attachDragListeners(el, record);
+        attachResizeListener(handle, record);
+        selectElement(record);
+        return record;
+      }
+
+      function attachDragListeners(node, record) {
+        let isDragging = false;
+        let startX = 0, startY = 0, initLeft = 0, initTop = 0;
+
+        node.addEventListener('pointerdown', (e) => {
+          if (e.target.classList.contains('resize-handle')) return;
+          selectElement(record);
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          initLeft = record.x;
+          initTop = record.y;
+          node.setPointerCapture(e.pointerId);
+          e.stopPropagation();
+        });
+
+        node.addEventListener('pointermove', (e) => {
+          if (!isDragging) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          let newX = Math.max(-50, Math.min(CANVAS_WIDTH - 20, initLeft + dx));
+          let newY = Math.max(-20, Math.min(CANVAS_HEIGHT - 30, initTop + dy));
+          record.x = newX;
+          record.y = newY;
+          node.style.left = newX + 'px';
+          node.style.top = newY + 'px';
+        });
+
+        const stopDrag = (e) => {
+          if (isDragging) {
+            isDragging = false;
+            try { node.releasePointerCapture(e.pointerId); } catch (ign) {}
+          }
+        };
+        node.addEventListener('pointerup', stopDrag);
+        node.addEventListener('pointercancel', stopDrag);
+      }
+
+      function attachResizeListener(handle, record) {
+        let isResizing = false;
+        let startX = 0, startW = 0;
+
+        handle.addEventListener('pointerdown', (e) => {
+          isResizing = true;
+          startX = e.clientX;
+          startW = record.width;
+          handle.setPointerCapture(e.pointerId);
+          e.stopPropagation();
+        });
+
+        handle.addEventListener('pointermove', (e) => {
+          if (!isResizing) return;
+          const dx = e.clientX - startX;
+          const newW = Math.max(50, Math.min(CANVAS_WIDTH - 20, startW + dx));
+          const newH = Math.round(newW / record.aspectRatio);
+          record.width = newW;
+          record.height = newH;
+          record.domNode.style.width = newW + 'px';
+          record.domNode.style.height = newH + 'px';
+        });
+
+        const stopResize = (e) => {
+          if (isResizing) {
+            isResizing = false;
+            try { handle.releasePointerCapture(e.pointerId); } catch (ign) {}
+          }
+        };
+        handle.addEventListener('pointerup', stopResize);
+        handle.addEventListener('pointercancel', stopResize);
+      }
+
+      function selectElement(record) {
+        deselectAll();
+        selectedElement = record;
+        record.domNode.classList.add('selected');
+        elementControls.classList.remove('hidden');
+        const isText = record.type === 'text';
+        btnAlignLeft.style.display = isText ? 'inline-flex' : 'none';
+        btnAlignCenter.style.display = isText ? 'inline-flex' : 'none';
+        btnAlignRight.style.display = isText ? 'inline-flex' : 'none';
+      }
+
+      function deselectAll() {
+        elements.forEach(r => r.domNode.classList.remove('selected'));
+        selectedElement = null;
+        elementControls.classList.add('hidden');
+      }
+
+      function adjustSelectedSize(delta) {
+        if (!selectedElement) return;
+        if (selectedElement.type === 'text') {
+          selectedElement.fontSize = Math.max(14, Math.min(64, selectedElement.fontSize + delta));
+          selectedElement.contentNode.style.fontSize = selectedElement.fontSize + 'px';
+        } else if (selectedElement.type === 'image') {
+          const newW = Math.max(50, Math.min(CANVAS_WIDTH - 20, selectedElement.width + delta * 8));
+          const newH = Math.round(newW / selectedElement.aspectRatio);
+          selectedElement.width = newW;
+          selectedElement.height = newH;
+          selectedElement.domNode.style.width = newW + 'px';
+          selectedElement.domNode.style.height = newH + 'px';
+        }
+      }
+
+      function setSelectedAlign(align) {
+        if (!selectedElement || selectedElement.type !== 'text') return;
+        selectedElement.align = align;
+        selectedElement.contentNode.style.textAlign = align;
+      }
+
+      function deleteSelectedElement() {
+        if (!selectedElement) return;
+        selectedElement.domNode.remove();
+        elements = elements.filter(r => r.id !== selectedElement.id);
+        deselectAll();
+      }
+
+      async function handlePrintSubmission() {
+        if (isSubmitting) return;
+        deselectAll();
+        if (elements.length === 0) {
+          alert("Please add some text or an image to print!");
+          return;
+        }
+
+        isSubmitting = true;
+        btnPrint.disabled = true;
+        showModal('Rendering 4x6 Label...', 'Compositing high-contrast thermal raster dots (800x1200)...', 25);
+
+        try {
+          const printCanvas = document.createElement('canvas');
+          printCanvas.width = PRINT_WIDTH;
+          printCanvas.height = PRINT_HEIGHT;
+          const ctx = printCanvas.getContext('2d');
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
+
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(30, 30, PRINT_WIDTH - 60, PRINT_HEIGHT - 60);
+
+          ctx.fillStyle = '#000000';
+          ctx.font = 'bold 20px monospace';
+          ctx.fillText('NOAHSMITH.DEV // REALTALK', 50, 65);
+          const dateStr = new Date().toISOString().slice(0, 10);
+          ctx.fillText(dateStr, PRINT_WIDTH - 180, 65);
+
+          ctx.fillRect(50, 75, PRINT_WIDTH - 100, 2);
+
+          const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
+          const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
+
+          for (const el of elements) {
+            if (el.type === 'image') {
+              await new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                  ctx.drawImage(img, el.x * scaleX, el.y * scaleY, el.width * scaleX, el.height * scaleY);
+                  resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = el.dataUrl;
+              });
+            } else if (el.type === 'text') {
+              const text = el.contentNode.innerText;
+              const lines = text.split('\n');
+              const fontSize = el.fontSize * scaleX;
+              ctx.font = 'bold ' + fontSize + 'px sans-serif';
+              ctx.fillStyle = '#000000';
+              const lineHeight = fontSize * 1.25;
+              const startX = el.x * scaleX;
+              const startY = (el.y * scaleY) + fontSize;
+
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const y = startY + (i * lineHeight);
+                if (el.align === 'center') {
+                  const tw = ctx.measureText(line).width;
+                  ctx.fillText(line, startX - (tw / 2), y);
+                } else if (el.align === 'right') {
+                  const tw = ctx.measureText(line).width;
+                  ctx.fillText(line, startX - tw, y);
+                } else {
+                  ctx.fillText(line, startX, y);
+                }
+              }
+            }
+          }
+
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(50, PRINT_HEIGHT - 80, PRINT_WIDTH - 100, 2);
+          ctx.font = '16px monospace';
+          ctx.fillText('DEVICE: NULLTONEX Y813BT (203 DPI)', 50, PRINT_HEIGHT - 55);
+          ctx.fillText('* LIVE DESK TRANSMISSION *', 50, PRINT_HEIGHT - 35);
+
+          const imgData = ctx.getImageData(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            const v = lum < 140 ? 0 : 255;
+            d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+          }
+          ctx.putImageData(imgData, 0, 0);
+
+          const pngDataUrl = printCanvas.toDataURL('image/png');
+
+          updateModal('Sending to Bridge...', 'Transmitting payload through Cloudflare Queue to Android phone...', 50);
+
+          const textSummary = elements
+            .filter(e => e.type === 'text')
+            .map(e => e.contentNode.innerText.trim())
+            .filter(t => t.length > 0)
+            .join(' | ') || 'Canvas Print';
+
+          const response = await fetch(WORKER_BASE_URL + '/api/quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'canvas',
+              imageData: pngDataUrl,
+              text: textSummary,
+              author: 'Canvas'
+            })
+          });
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || ('Server error ' + response.status));
+          }
+
+          const result = await response.json();
+          modalJobId.textContent = 'Job ID: ' + result.id;
+          updateModal('Printing on Noah\'s Desk...', 'Android bridge received job & is transmitting to NULLTONEX...', 75);
+
+          // Poll print status
+          let checks = 0;
+          const interval = setInterval(async () => {
+            checks++;
+            try {
+              const res = await fetch(WORKER_BASE_URL + '/api/quote/status?id=' + result.id);
+              if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'printed') {
+                  clearInterval(interval);
+                  updateModal('Printed Successfully! 🎉', 'Your label has physically burned onto the 4x6 roll on Noah\'s desk!', 100, true);
+                  isSubmitting = false;
+                  btnPrint.disabled = false;
+                  return;
+                }
+              }
+            } catch (ign) {}
+
+            if (checks >= 30) {
+              clearInterval(interval);
+              updateModal('Queued for Print', 'Your label is safe in the queue and will print shortly!', 100, true);
+              isSubmitting = false;
+              btnPrint.disabled = false;
+            }
+          }, 2000);
+
+        } catch (err) {
+          console.error(err);
+          updateModal('Transmission Error', err.message || 'Failed to connect to bridge', 100, true);
+          isSubmitting = false;
+          btnPrint.disabled = false;
+        }
+      }
+
+      function showModal(title, desc, progress) {
+        statusModal.classList.remove('hidden');
+        modalCloseBtn.classList.add('hidden');
+        modalTitle.textContent = title;
+        modalDesc.textContent = desc;
+        modalProgressBar.style.width = progress + '%';
+      }
+
+      function updateModal(title, desc, progress, showClose) {
+        modalTitle.textContent = title;
+        modalDesc.textContent = desc;
+        modalProgressBar.style.width = progress + '%';
+        if (showClose) modalCloseBtn.classList.remove('hidden');
+      }
+    })();
+  </script>
 </body>
 </html>

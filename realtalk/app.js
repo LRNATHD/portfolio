@@ -6,6 +6,9 @@
 (function () {
   'use strict';
 
+  if (window.__REALTALK_INITIALIZED__) return;
+  window.__REALTALK_INITIALIZED__ = true;
+
   // Configuration
   const WORKER_BASE_URL = 'https://realtalk-printer-bridge.super-disk-489b.workers.dev';
   const CANVAS_WIDTH = 400; // CSS display pixels
