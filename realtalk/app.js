@@ -61,9 +61,6 @@
 
     setupEventListeners();
     setupClipboardListener();
-
-    // Default starter text so the label isn't blank
-    addTextElement("Tap to edit text,\nor paste an image!", 60, 160, 26, 'center');
   }
 
   // --------------------------------------------------------------------------
@@ -76,10 +73,20 @@
       addTextElement('New text here...', 80, 220, 24, 'center');
     });
 
-    // Tap on empty space in container adds text
+    // Tap on empty space in container
     elementsContainer.addEventListener('pointerdown', (e) => {
       if (e.target === elementsContainer) {
         deselectAll();
+      }
+    });
+
+    // Single click on empty canvas adds text; if elements exist, deselects
+    elementsContainer.addEventListener('click', (e) => {
+      if (e.target === elementsContainer && elements.length === 0) {
+        const rect = elementsContainer.getBoundingClientRect();
+        const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
+        const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
+        addTextElement('Your text...', x, y, 24, 'center');
       }
     });
 
@@ -572,21 +579,6 @@
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
-      // Draw aesthetic outer frame
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(30, 30, PRINT_WIDTH - 60, PRINT_HEIGHT - 60);
-
-      // Header text
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 20px monospace';
-      ctx.fillText('NOAHSMITH.DEV // REALTALK', 50, 65);
-      const dateStr = new Date().toISOString().slice(0, 10);
-      ctx.fillText(dateStr, PRINT_WIDTH - 180, 65);
-
-      // Divider solid
-      ctx.fillRect(50, 75, PRINT_WIDTH - 100, 2);
-
       // Scale factor from display to physical printhead
       const scaleX = PRINT_WIDTH / CANVAS_WIDTH;   // 800 / 400 = 2.0
       const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT; // 1200 / 600 = 2.0
@@ -600,12 +592,12 @@
         }
       }
 
-      // Footer divider
+      // Small watermark in the corner: "made by noahsmith.dev"
       ctx.fillStyle = '#000000';
-      ctx.fillRect(50, PRINT_HEIGHT - 80, PRINT_WIDTH - 100, 2);
       ctx.font = '16px monospace';
-      ctx.fillText('DEVICE: NULLTONEX Y813BT (203 DPI)', 50, PRINT_HEIGHT - 55);
-      ctx.fillText('* LIVE DESK TRANSMISSION *', 50, PRINT_HEIGHT - 35);
+      const watermark = 'made by noahsmith.dev';
+      const wmWidth = ctx.measureText(watermark).width;
+      ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
 
       // Final 1-bit threshold pass to guarantee pure monochrome
       enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT);

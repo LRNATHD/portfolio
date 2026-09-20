@@ -229,43 +229,19 @@ html, body {
   touch-action: none;
 }
 
-/* Aesthetic Header & Footer inside Label */
-.stage-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px 6px 14px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #000000;
-  pointer-events: none;
-}
-
-.stage-divider-solid {
-  height: 1.5px;
-  background-color: #000000;
-  margin: 0 14px 4px 14px;
-  pointer-events: none;
-}
-
-.stage-divider-dashed {
-  height: 1px;
-  background: repeating-linear-gradient(90deg, #000, #000 6px, transparent 6px, transparent 10px);
-  margin: 4px 14px 4px 14px;
-  pointer-events: none;
-}
-
-.stage-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 14px 10px 14px;
+/* Corner Watermark inside Label */
+.stage-watermark {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
   font-family: var(--font-mono);
   font-size: 8.5px;
-  color: #333333;
+  color: #888888;
+  letter-spacing: 0.2px;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 5;
 }
 
 .unselectable {

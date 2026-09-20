@@ -223,42 +223,24 @@
       touch-action: none;
     }
 
-    .stage-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 14px 6px 14px;
-      font-family: var(--font-mono);
-      font-size: 9.5px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      color: #000000;
-      pointer-events: none;
-    }
-
-    .stage-divider-solid {
-      height: 1.5px;
-      background-color: #000000;
-      margin: 0 14px 4px 14px;
-      pointer-events: none;
-    }
-
-    .stage-divider-dashed {
-      height: 1px;
-      background: repeating-linear-gradient(90deg, #000, #000 6px, transparent 6px, transparent 10px);
-      margin: 4px 14px 4px 14px;
-      pointer-events: none;
-    }
-
-    .stage-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 4px 14px 10px 14px;
+    /* Corner Watermark inside Label */
+    .stage-watermark {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
       font-family: var(--font-mono);
       font-size: 8.5px;
-      color: #333333;
+      color: #888888;
+      letter-spacing: 0.2px;
       pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+      z-index: 5;
+    }
+
+    .unselectable {
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .elements-layer {
@@ -554,26 +536,13 @@
     <!-- Canvas Workspace Area -->
     <main class="canvas-workspace">
       <div class="canvas-container" id="canvasContainer">
-        <!-- 4x6" Interactive Thermal Label Stage -->
+        <!-- 4x6" Interactive Thermal Label Stage (Blank Slate) -->
         <div class="thermal-stage" id="stage">
-          <div class="stage-header">
-            <span class="stage-title">REALTALK // DESK PRINTER</span>
-            <span class="stage-date" id="lblDate">2026-09-20</span>
-          </div>
-          <div class="stage-divider-solid"></div>
+          <!-- Active elements container - pure blank slate -->
+          <div id="elementsContainer" class="elements-layer"></div>
 
-          <!-- Active elements container with visible starter text -->
-          <div id="elementsContainer" class="elements-layer">
-            <div class="canvas-element" id="initialElement" style="left: 45px; top: 180px;">
-              <div class="canvas-text-content" contenteditable="true" spellcheck="false" style="font-size: 26px; text-align: center;">Tap to edit text,&#10;or paste an image!</div>
-            </div>
-          </div>
-
-          <div class="stage-divider-dashed"></div>
-          <div class="stage-footer">
-            <span class="stage-device">NULLTONEX Y813BT &bull; 203 DPI</span>
-            <span class="stage-loc">* LIVE DESK TRANSMISSION *</span>
-          </div>
+          <!-- Bottom subtle corner watermark -->
+          <div class="stage-watermark unselectable">made by noahsmith.dev</div>
         </div>
       </div>
 
@@ -629,7 +598,7 @@
 
       let elements = [];
       let selectedElement = null;
-      let nextElementId = 2;
+      let nextElementId = 1;
       let isPhotoDither = true;
       let isSubmitting = false;
 
@@ -656,27 +625,6 @@
       const modalProgressBar = document.getElementById('modalProgressBar');
       const modalJobId = document.getElementById('modalJobId');
       const modalCloseBtn = document.getElementById('modalCloseBtn');
-      const lblDate = document.getElementById('lblDate');
-
-      if (lblDate) lblDate.textContent = new Date().toISOString().slice(0, 10);
-
-      // Register initial element if present in DOM
-      const initEl = document.getElementById('initialElement');
-      if (initEl) {
-        const contentNode = initEl.querySelector('.canvas-text-content');
-        const record = {
-          id: 'el_1',
-          type: 'text',
-          x: 45,
-          y: 180,
-          fontSize: 26,
-          align: 'center',
-          domNode: initEl,
-          contentNode: contentNode
-        };
-        elements.push(record);
-        attachDragListeners(initEl, record);
-      }
 
       // Add Text
       btnAddText.addEventListener('click', (e) => {
@@ -688,6 +636,16 @@
       elementsContainer.addEventListener('pointerdown', (e) => {
         if (e.target === elementsContainer) {
           deselectAll();
+        }
+      });
+
+      // Single click on empty canvas adds text; if elements exist, deselects
+      elementsContainer.addEventListener('click', (e) => {
+        if (e.target === elementsContainer && elements.length === 0) {
+          const rect = elementsContainer.getBoundingClientRect();
+          const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
+          const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
+          addTextElement('Your text...', x, y, 24, 'center');
         }
       });
 
@@ -1068,18 +1026,6 @@
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 4;
-          ctx.strokeRect(30, 30, PRINT_WIDTH - 60, PRINT_HEIGHT - 60);
-
-          ctx.fillStyle = '#000000';
-          ctx.font = 'bold 20px monospace';
-          ctx.fillText('NOAHSMITH.DEV // REALTALK', 50, 65);
-          const dateStr = new Date().toISOString().slice(0, 10);
-          ctx.fillText(dateStr, PRINT_WIDTH - 180, 65);
-
-          ctx.fillRect(50, 75, PRINT_WIDTH - 100, 2);
-
           const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
           const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
@@ -1120,11 +1066,12 @@
             }
           }
 
+          // Small watermark in the corner: "made by noahsmith.dev"
           ctx.fillStyle = '#000000';
-          ctx.fillRect(50, PRINT_HEIGHT - 80, PRINT_WIDTH - 100, 2);
           ctx.font = '16px monospace';
-          ctx.fillText('DEVICE: NULLTONEX Y813BT (203 DPI)', 50, PRINT_HEIGHT - 55);
-          ctx.fillText('* LIVE DESK TRANSMISSION *', 50, PRINT_HEIGHT - 35);
+          const watermark = 'made by noahsmith.dev';
+          const wmWidth = ctx.measureText(watermark).width;
+          ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
 
           const imgData = ctx.getImageData(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
           const d = imgData.data;
