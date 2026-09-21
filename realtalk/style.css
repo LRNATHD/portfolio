@@ -223,10 +223,10 @@ html, body {
   padding: 8px;
 }
 
-/* 4x6" Thermal Paper Label (432 x 600 CSS pixels = 108mm edge-to-edge) */
+/* 4x6" Thermal Paper Label (400 x 600 CSS pixels = 2:3 aspect ratio) */
 .thermal-stage {
   position: relative;
-  width: 432px;
+  width: 400px;
   height: 600px;
   background-color: var(--label-bg);
   color: var(--label-text);
@@ -856,6 +856,6 @@ html, body {
 @media (max-width: 480px) {
   .thermal-stage {
     width: 320px;
-    height: 444px;
+    height: 480px;
   }
 }

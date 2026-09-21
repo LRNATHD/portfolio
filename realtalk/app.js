@@ -16,9 +16,9 @@
 
   // Configuration
   const WORKER_BASE_URL = 'https://realtalk-printer-bridge.super-disk-489b.workers.dev';
-  const CANVAS_WIDTH = 432; // CSS display pixels (108mm @ 864x1200 full bleed)
+  const CANVAS_WIDTH = 400; // CSS display pixels (400x600 2:3 aspect ratio)
   const CANVAS_HEIGHT = 600;
-  const PRINT_WIDTH = 864; // Physical dots (108mm / 4.25" @ 203 DPI edge-to-edge)
+  const PRINT_WIDTH = 800; // Physical dots (203 DPI 4x6" printhead)
   const PRINT_HEIGHT = 1200;
   const STORAGE_DRAFT_KEY = 'realtalk_active_draft_v1';
   const STORAGE_HISTORY_KEY = 'realtalk_canvas_history_v1';
@@ -1139,15 +1139,15 @@
    */
   async function generateThumbnail() {
     const thumbCanvas = document.createElement('canvas');
-    thumbCanvas.width = 108;
+    thumbCanvas.width = 100;
     thumbCanvas.height = 150;
     const ctx = thumbCanvas.getContext('2d');
 
     // Solid background matching stage
     ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
-    ctx.fillRect(0, 0, 108, 150);
+    ctx.fillRect(0, 0, 100, 150);
 
-    const scaleX = 108 / CANVAS_WIDTH;
+    const scaleX = 100 / CANVAS_WIDTH;
     const scaleY = 150 / CANVAS_HEIGHT;
 
     for (const el of elements) {
@@ -1421,7 +1421,7 @@
       ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
       ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
-      // Scale factor from display to physical printhead (864/432 = 2.0, 1200/600 = 2.0)
+      // Scale factor from display to physical printhead (800/400 = 2.0, 1200/600 = 2.0)
       const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
       const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
