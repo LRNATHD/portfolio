@@ -28,6 +28,7 @@
   let selectedElement = null;
   let nextElementId = 1;
   let isPhotoDither = true; // true = Floyd-Steinberg, false = high-contrast threshold
+  let isBlackBg = false;
   let isSubmitting = false;
   let historyListItems = [];
   let autoSaveTimer = null;
@@ -41,6 +42,9 @@
   const btnPasteImage = document.getElementById('btnPasteImage');
   const btnDitherMode = document.getElementById('btnDitherMode');
   const ditherModeText = document.getElementById('ditherModeText');
+  const btnBgColor = document.getElementById('btnBgColor');
+  const bgIcon = document.getElementById('bgIcon');
+  const bgColorText = document.getElementById('bgColorText');
   const btnClear = document.getElementById('btnClear');
   const btnPrint = document.getElementById('btnPrint');
   const btnNewCanvas = document.getElementById('btnNewCanvas');
@@ -58,6 +62,9 @@
   const elementControls = document.getElementById('elementControls');
   const btnSizeDown = document.getElementById('btnSizeDown');
   const btnSizeUp = document.getElementById('btnSizeUp');
+  const btnTextColor = document.getElementById('btnTextColor');
+  const textColorIcon = document.getElementById('textColorIcon');
+  const btnInvertImage = document.getElementById('btnInvertImage');
   const btnRotateCCW = document.getElementById('btnRotateCCW');
   const btnRotateCW = document.getElementById('btnRotateCW');
   const btnRotate90 = document.getElementById('btnRotate90');
@@ -86,6 +93,7 @@
 
     setupEventListeners();
     setupClipboardListener();
+    setupKeyboardListener();
     loadHistoryFromStorage();
     restoreActiveDraft();
   }
@@ -231,9 +239,18 @@
       });
     }
 
+    // Background color toggle (White vs Black)
+    if (btnBgColor) {
+      btnBgColor.addEventListener('click', () => {
+        toggleStageBgColor();
+      });
+    }
+
     // Inspector button bindings
     if (btnSizeDown) btnSizeDown.addEventListener('click', () => adjustSelectedSize(-2));
     if (btnSizeUp) btnSizeUp.addEventListener('click', () => adjustSelectedSize(2));
+    if (btnTextColor) btnTextColor.addEventListener('click', () => toggleSelectedTextColor());
+    if (btnInvertImage) btnInvertImage.addEventListener('click', () => invertSelectedImage());
     if (btnRotateCCW) btnRotateCCW.addEventListener('click', () => rotateSelectedBy(-15));
     if (btnRotateCW) btnRotateCW.addEventListener('click', () => rotateSelectedBy(15));
     if (btnRotate90) btnRotate90.addEventListener('click', () => rotateSelectedBy(90));
@@ -247,6 +264,38 @@
         statusModal.classList.add('hidden');
       });
     }
+  }
+
+  // Global Keyboard Listener (Backspace & Delete keys)
+  function setupKeyboardListener() {
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable
+        );
+
+        if (isInput) {
+          // If editing a text element and it's empty, backspace removes the element cleanly
+          if (activeEl.isContentEditable && selectedElement && selectedElement.contentNode === activeEl) {
+            const raw = activeEl.innerText.replace(/[\r\n\s]/g, '');
+            if (raw.length === 0) {
+              e.preventDefault();
+              deleteSelectedElement();
+            }
+          }
+          return;
+        }
+
+        // Outside text editing: delete selected element
+        if (selectedElement) {
+          e.preventDefault();
+          deleteSelectedElement();
+        }
+      }
+    });
   }
 
   // Global Clipboard Listener (Cmd+V / Ctrl+V anywhere on window)
@@ -367,7 +416,7 @@
   // --------------------------------------------------------------------------
   // Text Element Management
   // --------------------------------------------------------------------------
-  function addTextElement(text, x, y, fontSize = 24, align = 'center', rotation = 0) {
+  function addTextElement(text, x, y, fontSize = 24, align = 'center', rotation = 0, color = null) {
     const id = 'el_' + nextElementId++;
     const el = document.createElement('div');
     el.className = 'canvas-element';
@@ -376,12 +425,15 @@
     el.style.top = `${y}px`;
     el.style.transform = `rotate(${rotation || 0}deg)`;
 
+    const textColor = color || (isBlackBg ? '#ffffff' : '#000000');
+
     const content = document.createElement('div');
     content.className = 'canvas-text-content';
     content.contentEditable = 'true';
     content.spellcheck = false;
     content.style.fontSize = `${fontSize}px`;
     content.style.textAlign = align;
+    content.style.color = textColor;
     content.innerText = text;
 
     // Rotation Handle & Stem
@@ -405,6 +457,7 @@
       fontSize,
       align,
       rotation: rotation || 0,
+      color: textColor,
       domNode: el,
       contentNode: content
     };
@@ -834,12 +887,24 @@
     elementControls.classList.remove('hidden');
 
     const isText = record.type === 'text';
+    const isImage = record.type === 'image';
     if (btnAlignLeft) btnAlignLeft.style.display = isText ? 'inline-flex' : 'none';
     if (btnAlignCenter) btnAlignCenter.style.display = isText ? 'inline-flex' : 'none';
     if (btnAlignRight) btnAlignRight.style.display = isText ? 'inline-flex' : 'none';
 
     if (btnSizeDown) btnSizeDown.textContent = isText ? 'A-' : '−';
     if (btnSizeUp) btnSizeUp.textContent = isText ? 'A+' : '+';
+
+    if (btnTextColor) {
+      btnTextColor.style.display = isText ? 'inline-flex' : 'none';
+      if (isText) {
+        updateTextColorIcon(record.color || (isBlackBg ? '#ffffff' : '#000000'));
+      }
+    }
+
+    if (btnInvertImage) {
+      btnInvertImage.style.display = isImage ? 'inline-flex' : 'none';
+    }
 
     updateInspectorRotateBadge(record.rotation || 0);
   }
@@ -902,6 +967,75 @@
     triggerAutoSave();
   }
 
+  function updateTextColorIcon(color) {
+    if (!textColorIcon) return;
+    if (color === '#ffffff') {
+      textColorIcon.innerHTML = '&#9898;';
+      if (btnTextColor) btnTextColor.title = 'Text: White (click for Black)';
+    } else {
+      textColorIcon.innerHTML = '&#9899;';
+      if (btnTextColor) btnTextColor.title = 'Text: Black (click for White)';
+    }
+  }
+
+  function toggleSelectedTextColor() {
+    if (!selectedElement || selectedElement.type !== 'text') return;
+    const curColor = selectedElement.color || (isBlackBg ? '#ffffff' : '#000000');
+    const newColor = curColor === '#ffffff' ? '#000000' : '#ffffff';
+    selectedElement.color = newColor;
+    selectedElement.contentNode.style.color = newColor;
+    updateTextColorIcon(newColor);
+    triggerAutoSave();
+  }
+
+  function invertSelectedImage() {
+    if (!selectedElement || selectedElement.type !== 'image') return;
+    const record = selectedElement;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth || img.width;
+      c.height = img.naturalHeight || img.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      const imgData = ctx.getImageData(0, 0, c.width, c.height);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = 255 - d[i];
+        d[i + 1] = 255 - d[i + 1];
+        d[i + 2] = 255 - d[i + 2];
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      const invertedDataUrl = c.toDataURL('image/png');
+      record.dataUrl = invertedDataUrl;
+      record.imgNode.src = invertedDataUrl;
+      triggerAutoSave();
+    };
+    img.src = record.dataUrl;
+  }
+
+  function setStageBgColor(black) {
+    isBlackBg = !!black;
+    if (isBlackBg) {
+      if (stage) stage.classList.add('black-bg');
+      if (btnBgColor) btnBgColor.classList.add('active');
+      if (bgIcon) bgIcon.innerHTML = '&#9632;';
+      if (bgColorText) bgColorText.textContent = 'Bg: Black';
+    } else {
+      if (stage) stage.classList.remove('black-bg');
+      if (btnBgColor) btnBgColor.classList.remove('active');
+      if (bgIcon) bgIcon.innerHTML = '&#9723;';
+      if (bgColorText) bgColorText.textContent = 'Bg: White';
+    }
+  }
+
+  function toggleStageBgColor() {
+    setStageBgColor(!isBlackBg);
+    triggerAutoSave();
+  }
+
   // --------------------------------------------------------------------------
   // Auto-Save Session Persistence (localStorage)
   // --------------------------------------------------------------------------
@@ -921,6 +1055,7 @@
       rotation: el.rotation || 0,
       fontSize: el.fontSize,
       align: el.align,
+      color: el.color,
       text: el.type === 'text' ? el.contentNode.innerText : undefined,
       width: el.width,
       height: el.height,
@@ -929,6 +1064,7 @@
     }));
 
     const state = {
+      isBlackBg,
       elements: serializedElements,
       updatedAt: Date.now()
     };
@@ -960,9 +1096,13 @@
     elements = [];
     nextElementId = 1;
 
-    for (const item of state.elements) {
+    if (state.isBlackBg !== undefined) {
+      setStageBgColor(!!state.isBlackBg);
+    }
+
+    for (const item of (state.elements || [])) {
       if (item.type === 'text') {
-        addTextElement(item.text || '', item.x, item.y, item.fontSize || 24, item.align || 'center', item.rotation || 0);
+        addTextElement(item.text || '', item.x, item.y, item.fontSize || 24, item.align || 'center', item.rotation || 0, item.color);
       } else if (item.type === 'image' && item.dataUrl) {
         addImageElement(item.dataUrl, item.width || 200, item.height || 200, item.rotation || 0, item.width, item.height, item.x, item.y);
       }
@@ -1003,8 +1143,8 @@
     thumbCanvas.height = 150;
     const ctx = thumbCanvas.getContext('2d');
 
-    // Solid white label background
-    ctx.fillStyle = '#ffffff';
+    // Solid background matching stage
+    ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
     ctx.fillRect(0, 0, 108, 150);
 
     const scaleX = 108 / CANVAS_WIDTH;
@@ -1047,7 +1187,7 @@
         if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
 
         ctx.font = `bold ${fontSize}px sans-serif`;
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = el.color || (isBlackBg ? '#ffffff' : '#000000');
         const startY = -(totalHeight / 2) + fontSize * 0.85;
 
         for (let i = 0; i < lines.length; i++) {
@@ -1088,6 +1228,7 @@
       rotation: el.rotation || 0,
       fontSize: el.fontSize,
       align: el.align,
+      color: el.color,
       text: el.type === 'text' ? el.contentNode.innerText : undefined,
       width: el.width,
       height: el.height,
@@ -1101,6 +1242,7 @@
       timestamp: Date.now(),
       summary: textSummary,
       elementCount: elements.length,
+      isBlackBg,
       thumbnail: thumb,
       elements: serializedElements
     };
@@ -1147,6 +1289,7 @@
     elements = [];
     nextElementId = 1;
     activeSnapshotId = null;
+    setStageBgColor(false);
     localStorage.removeItem(STORAGE_DRAFT_KEY);
     renderHistorySidebar();
     closeHistorySidebar();
@@ -1274,11 +1417,11 @@
       printCanvas.height = PRINT_HEIGHT;
       const ctx = printCanvas.getContext('2d');
 
-      // Fill solid white background
-      ctx.fillStyle = '#ffffff';
+      // Fill solid background (White or Black)
+      ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
       ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
-      // Scale factor from display to physical printhead (800/400 = 2.0, 1200/600 = 2.0)
+      // Scale factor from display to physical printhead (864/432 = 2.0, 1200/600 = 2.0)
       const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
       const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
@@ -1292,7 +1435,7 @@
       }
 
       // Discreet corner watermark: "made by noahsmith.dev"
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = isBlackBg ? '#ffffff' : '#000000';
       ctx.font = '16px monospace';
       const watermark = 'made by noahsmith.dev';
       const wmWidth = ctx.measureText(watermark).width;
@@ -1392,7 +1535,7 @@
       ctx.rotate((el.rotation * Math.PI) / 180);
     }
 
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = el.color || (isBlackBg ? '#ffffff' : '#000000');
     const startY = -(totalHeight / 2) + fontSize * 0.85;
 
     for (let i = 0; i < lines.length; i++) {

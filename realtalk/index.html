@@ -53,6 +53,11 @@
         <span class="tool-text">New Label</span>
       </button>
 
+      <button id="btnBgColor" class="tool-btn toggle" type="button" title="Toggle label background color (White / Black)">
+        <span class="tool-icon" id="bgIcon">&#9723;</span>
+        <span class="tool-text" id="bgColorText">Bg: White</span>
+      </button>
+
       <div class="toolbar-separator"></div>
 
       <button id="btnDitherMode" class="tool-btn toggle active" type="button" title="Toggle photo dithering vs high-contrast">
@@ -83,7 +88,7 @@
 
         <!-- Quick Tips Hint -->
         <div class="workspace-hint">
-          <span>&#128161; Tap anywhere to add text &bull; Paste images with <b>Cmd+V</b> / <b>Ctrl+V</b> &bull; Drag, resize &amp; rotate freely</span>
+          <span>&#128161; Tap anywhere to add text &bull; Paste images with <b>Cmd+V</b> / <b>Ctrl+V</b> &bull; Drag, resize &amp; rotate freely &bull; <b>Backspace</b> to delete</span>
         </div>
       </main>
 
@@ -112,6 +117,13 @@
     <div id="elementControls" class="element-controls hidden">
       <button id="btnSizeDown" class="control-btn" title="Decrease size">A-</button>
       <button id="btnSizeUp" class="control-btn" title="Increase size">A+</button>
+      <div class="control-divider"></div>
+      <button id="btnTextColor" class="control-btn" title="Toggle text color (Black / White)">
+        <span id="textColorIcon">&#9899;</span>
+      </button>
+      <button id="btnInvertImage" class="control-btn text-btn" title="Invert image colors (Black &#8596; White)">
+        <span>&#9681; Invert</span>
+      </button>
       <div class="control-divider"></div>
       <button id="btnRotateCCW" class="control-btn" title="Rotate counter-clockwise 15°">&#8634;</button>
       <span id="rotateDegreeBadge" class="control-btn text-btn" title="Current rotation">0°</span>

@@ -254,6 +254,17 @@ html, body {
   z-index: 5;
 }
 
+/* Black Background Mode */
+.thermal-stage.black-bg {
+  background-color: #000000;
+  color: #ffffff;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.thermal-stage.black-bg .stage-watermark {
+  color: #555555;
+}
+
 .unselectable {
   user-select: none;
   -webkit-user-select: none;
