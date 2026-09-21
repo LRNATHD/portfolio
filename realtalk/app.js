@@ -457,9 +457,22 @@
     img.className = 'canvas-img-content';
     img.src = dataUrl;
 
-    const resizeHandle = document.createElement('div');
-    resizeHandle.className = 'resize-handle';
-    resizeHandle.title = 'Drag to resize';
+    // 4 Corner Resize Handles
+    const handleBR = document.createElement('div');
+    handleBR.className = 'resize-handle br';
+    handleBR.title = 'Drag to resize';
+
+    const handleTL = document.createElement('div');
+    handleTL.className = 'resize-handle tl';
+    handleTL.title = 'Drag to resize';
+
+    const handleTR = document.createElement('div');
+    handleTR.className = 'resize-handle tr';
+    handleTR.title = 'Drag to resize';
+
+    const handleBL = document.createElement('div');
+    handleBL.className = 'resize-handle bl';
+    handleBL.title = 'Drag to resize';
 
     const stem = document.createElement('div');
     stem.className = 'rotate-stem';
@@ -469,7 +482,10 @@
     rotateHandle.innerHTML = '&#8635;';
 
     el.appendChild(img);
-    el.appendChild(resizeHandle);
+    el.appendChild(handleBR);
+    el.appendChild(handleTL);
+    el.appendChild(handleTR);
+    el.appendChild(handleBL);
     el.appendChild(stem);
     el.appendChild(rotateHandle);
     elementsContainer.appendChild(el);
@@ -490,8 +506,81 @@
     elements.push(record);
 
     attachDragListeners(el, record);
-    attachResizeListener(resizeHandle, record);
+    attachResizeListener(handleBR, record, 'br');
+    attachResizeListener(handleTL, record, 'tl');
+    attachResizeListener(handleTR, record, 'tr');
+    attachResizeListener(handleBL, record, 'bl');
     attachRotateListener(rotateHandle, record);
+
+    // Two-finger pinch to resize on iPad
+    let touchStartDist = 0;
+    let touchStartW = 0;
+    let touchStartH = 0;
+    let touchInitX = 0;
+    let touchInitY = 0;
+
+    el.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        selectElement(record);
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        touchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        touchStartW = record.width;
+        touchStartH = record.height;
+        touchInitX = record.x;
+        touchInitY = record.y;
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && touchStartDist > 0) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const scale = currentDist / touchStartDist;
+        const newW = Math.max(30, Math.min(2400, Math.round(touchStartW * scale)));
+        const newH = Math.round(newW / record.aspectRatio);
+        const newX = Math.round(touchInitX - (newW - touchStartW) / 2);
+        const newY = Math.round(touchInitY - (newH - touchStartH) / 2);
+
+        record.width = newW;
+        record.height = newH;
+        record.x = newX;
+        record.y = newY;
+        el.style.width = `${newW}px`;
+        el.style.height = `${newH}px`;
+        el.style.left = `${newX}px`;
+        el.style.top = `${newY}px`;
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchend', (e) => {
+      if (touchStartDist > 0) {
+        touchStartDist = 0;
+        triggerAutoSave();
+      }
+    });
+
+    // Desktop wheel/trackpad zoom when image is selected
+    el.addEventListener('wheel', (e) => {
+      if (selectedElement === record) {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.08 : 0.92;
+        const newW = Math.max(30, Math.min(2400, Math.round(record.width * factor)));
+        const newH = Math.round(newW / record.aspectRatio);
+        const oldW = record.width;
+        const oldH = record.height;
+        record.x = Math.round(record.x - (newW - oldW) / 2);
+        record.y = Math.round(record.y - (newH - oldH) / 2);
+        record.width = newW;
+        record.height = newH;
+        record.domNode.style.width = `${newW}px`;
+        record.domNode.style.height = `${newH}px`;
+        record.domNode.style.left = `${record.x}px`;
+        record.domNode.style.top = `${record.y}px`;
+        triggerAutoSave();
+      }
+    }, { passive: false });
 
     selectElement(record);
     return record;
@@ -530,8 +619,17 @@
       let newX = initLeft + dx;
       let newY = initTop + dy;
 
-      newX = Math.max(-50, Math.min(CANVAS_WIDTH - 20, newX));
-      newY = Math.max(-20, Math.min(CANVAS_HEIGHT - 30, newY));
+      const elemW = record.width || (record.domNode.offsetWidth || 80);
+      const elemH = record.height || (record.domNode.offsetHeight || 40);
+
+      // Keep at least 30px of the element inside the canvas boundaries so it can always be grabbed
+      const minX = -elemW + 30;
+      const maxX = CANVAS_WIDTH - 30;
+      const minY = -elemH + 30;
+      const maxY = CANVAS_HEIGHT - 30;
+
+      newX = Math.max(minX, Math.min(maxX, newX));
+      newY = Math.max(minY, Math.min(maxY, newY));
 
       record.x = newX;
       record.y = newY;
@@ -554,31 +652,95 @@
   }
 
   // --------------------------------------------------------------------------
-  // Resize Handle Listener
+  // Resize Handle Listener (4 Corners & Past Canvas Size)
   // --------------------------------------------------------------------------
-  function attachResizeListener(handle, record) {
+  function attachResizeListener(handle, record, corner = 'br') {
     let isResizing = false;
     let startX = 0;
+    let startY = 0;
     let startW = 0;
+    let startH = 0;
+    let initX = 0;
+    let initY = 0;
+    let centerScreenX = 0;
+    let centerScreenY = 0;
+    let initialDist = 0;
 
     handle.addEventListener('pointerdown', (e) => {
       isResizing = true;
       startX = e.clientX;
+      startY = e.clientY;
       startW = record.width;
+      startH = record.height;
+      initX = record.x;
+      initY = record.y;
+
+      const rect = record.domNode.getBoundingClientRect();
+      centerScreenX = rect.left + rect.width / 2;
+      centerScreenY = rect.top + rect.height / 2;
+      initialDist = Math.hypot(startX - centerScreenX, startY - centerScreenY);
+      if (initialDist < 10) initialDist = 10;
+
       handle.setPointerCapture(e.pointerId);
       e.stopPropagation();
     });
 
     handle.addEventListener('pointermove', (e) => {
       if (!isResizing) return;
-      const dx = e.clientX - startX;
-      const newW = Math.max(50, Math.min(CANVAS_WIDTH - 20, startW + dx));
-      const newH = Math.round(newW / record.aspectRatio);
+
+      const maxAllowedW = 2400; // Allow sizing well past the 400px canvas
+      const minAllowedW = 30;
+
+      let newW = startW;
+      let newH = startH;
+      let newX = initX;
+      let newY = initY;
+
+      // If rotated, scale smoothly from center so it never jumps or skews
+      if (record.rotation && record.rotation !== 0) {
+        const currentDist = Math.hypot(e.clientX - centerScreenX, e.clientY - centerScreenY);
+        const scale = currentDist / initialDist;
+        newW = Math.max(minAllowedW, Math.min(maxAllowedW, Math.round(startW * scale)));
+        newH = Math.round(newW / record.aspectRatio);
+        newX = Math.round(initX - (newW - startW) / 2);
+        newY = Math.round(initY - (newH - startH) / 2);
+      } else {
+        // Standard cardinal corner resizing when unrotated
+        if (corner === 'br') {
+          const dx = e.clientX - startX;
+          newW = Math.max(minAllowedW, Math.min(maxAllowedW, startW + dx));
+          newH = Math.round(newW / record.aspectRatio);
+          newX = initX;
+          newY = initY;
+        } else if (corner === 'tl') {
+          const dx = startX - e.clientX;
+          newW = Math.max(minAllowedW, Math.min(maxAllowedW, startW + dx));
+          newH = Math.round(newW / record.aspectRatio);
+          newX = initX - (newW - startW);
+          newY = initY - (newH - startH);
+        } else if (corner === 'tr') {
+          const dx = e.clientX - startX;
+          newW = Math.max(minAllowedW, Math.min(maxAllowedW, startW + dx));
+          newH = Math.round(newW / record.aspectRatio);
+          newX = initX;
+          newY = initY - (newH - startH);
+        } else if (corner === 'bl') {
+          const dx = startX - e.clientX;
+          newW = Math.max(minAllowedW, Math.min(maxAllowedW, startW + dx));
+          newH = Math.round(newW / record.aspectRatio);
+          newX = initX - (newW - startW);
+          newY = initY;
+        }
+      }
 
       record.width = newW;
       record.height = newH;
+      record.x = newX;
+      record.y = newY;
       record.domNode.style.width = `${newW}px`;
       record.domNode.style.height = `${newH}px`;
+      record.domNode.style.left = `${newX}px`;
+      record.domNode.style.top = `${newY}px`;
     });
 
     const stopResize = (e) => {
@@ -676,6 +838,9 @@
     if (btnAlignCenter) btnAlignCenter.style.display = isText ? 'inline-flex' : 'none';
     if (btnAlignRight) btnAlignRight.style.display = isText ? 'inline-flex' : 'none';
 
+    if (btnSizeDown) btnSizeDown.textContent = isText ? 'A-' : '−';
+    if (btnSizeUp) btnSizeUp.textContent = isText ? 'A+' : '+';
+
     updateInspectorRotateBadge(record.rotation || 0);
   }
 
@@ -692,15 +857,22 @@
   function adjustSelectedSize(delta) {
     if (!selectedElement) return;
     if (selectedElement.type === 'text') {
-      selectedElement.fontSize = Math.max(14, Math.min(64, selectedElement.fontSize + delta));
+      selectedElement.fontSize = Math.max(14, Math.min(120, selectedElement.fontSize + delta));
       selectedElement.contentNode.style.fontSize = `${selectedElement.fontSize}px`;
     } else if (selectedElement.type === 'image') {
-      const newW = Math.max(50, Math.min(CANVAS_WIDTH - 20, selectedElement.width + delta * 8));
+      const factor = delta > 0 ? 1.15 : 0.87;
+      const newW = Math.max(30, Math.min(2400, Math.round(selectedElement.width * factor)));
       const newH = Math.round(newW / selectedElement.aspectRatio);
+      const oldW = selectedElement.width;
+      const oldH = selectedElement.height;
+      selectedElement.x = Math.round(selectedElement.x - (newW - oldW) / 2);
+      selectedElement.y = Math.round(selectedElement.y - (newH - oldH) / 2);
       selectedElement.width = newW;
       selectedElement.height = newH;
       selectedElement.domNode.style.width = `${newW}px`;
       selectedElement.domNode.style.height = `${newH}px`;
+      selectedElement.domNode.style.left = `${selectedElement.x}px`;
+      selectedElement.domNode.style.top = `${selectedElement.y}px`;
     }
     triggerAutoSave();
   }
