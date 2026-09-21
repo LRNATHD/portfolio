@@ -990,7 +990,7 @@
     if (historyListItems.length === 0) {
       container.innerHTML = `
         <div class="history-empty">
-          <span style="font-size: 20px;">🏷️</span><br/>
+          <span style="font-size: 20px;">&#127991;</span><br/>
           <strong style="display:block; margin: 4px 0;">No saved labels yet</strong>
           <span>Labels you print or design will be saved here automatically.</span>
         </div>
@@ -1265,7 +1265,7 @@
           const data = await res.json();
           if (data.status === 'printed') {
             clearInterval(interval);
-            updateModal('Printed Successfully! 🎉', 'Your label has physically burned onto the 4x6 roll on Noah\'s desk!', 100, true);
+            updateModal('Printed Successfully! &#127881;', 'Your label has physically burned onto the 4x6 roll on Noah\'s desk!', 100, true);
             isSubmitting = false;
             btnPrint.disabled = false;
             return;
