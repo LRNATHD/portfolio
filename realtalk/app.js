@@ -285,11 +285,12 @@
 
   /**
    * Converts an image to 1-bit monochrome using Floyd-Steinberg error diffusion.
-   * Dithers at up to 1200px native resolution matching the full physical 800x1200
-   * printhead matrix (960,000 discrete micro-dots).
+   * Dithers at 400px max dimension matching display resolution and producing punchy
+   * 2x2 dot clusters that heat thermal paper effectively without washing out.
    */
   function convertImageToDithered(img, useDither = true) {
-    const maxDim = 1200; // Native high-res printhead resolution
+    // Determine max dimension for canvas (max 400px wide/high)
+    const maxDim = 400;
     let w = img.width;
     let h = img.height;
     if (w > maxDim || h > maxDim) {
