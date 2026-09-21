@@ -1,6 +1,11 @@
 /**
  * RealTalk // Thermal Canvas Engine
  * Freeform text & dithered image canvas for iPad & desktop thermal printing
+ * Features:
+ * - Interactive element rotation (drag handle + precision buttons)
+ * - Automatic session persistence (debounced draft auto-save in localStorage)
+ * - Past canvases history sidebar (thumbnails, instant reload, delete, + new canvas)
+ * - 1:1 Ultra-Detail printhead dithering (up to 1200px native resolution)
  */
 
 (function () {
@@ -15,6 +20,8 @@
   const CANVAS_HEIGHT = 600;
   const PRINT_WIDTH = 800; // Physical dots (203 DPI 4x6")
   const PRINT_HEIGHT = 1200;
+  const STORAGE_DRAFT_KEY = 'realtalk_active_draft_v1';
+  const STORAGE_HISTORY_KEY = 'realtalk_canvas_history_v1';
 
   // State
   let elements = [];
@@ -22,6 +29,9 @@
   let nextElementId = 1;
   let isPhotoDither = true; // true = Floyd-Steinberg, false = high-contrast threshold
   let isSubmitting = false;
+  let historyListItems = [];
+  let autoSaveTimer = null;
+  let activeSnapshotId = null;
 
   // DOM Elements
   const stage = document.getElementById('stage');
@@ -33,11 +43,25 @@
   const ditherModeText = document.getElementById('ditherModeText');
   const btnClear = document.getElementById('btnClear');
   const btnPrint = document.getElementById('btnPrint');
+  const btnNewCanvas = document.getElementById('btnNewCanvas');
+
+  // History Sidebar DOM
+  const historySidebar = document.getElementById('historySidebar');
+  const historyContainer = document.getElementById('historyContainer');
+  const historyBadge = document.getElementById('historyBadge');
+  const btnToggleHistory = document.getElementById('btnToggleHistory');
+  const btnSidebarClose = document.getElementById('btnSidebarClose');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const btnNewCanvasSidebar = document.getElementById('btnNewCanvasSidebar');
 
   // Floating Controls
   const elementControls = document.getElementById('elementControls');
   const btnSizeDown = document.getElementById('btnSizeDown');
   const btnSizeUp = document.getElementById('btnSizeUp');
+  const btnRotateCCW = document.getElementById('btnRotateCCW');
+  const btnRotateCW = document.getElementById('btnRotateCW');
+  const btnRotate90 = document.getElementById('btnRotate90');
+  const rotateDegreeBadge = document.getElementById('rotateDegreeBadge');
   const btnAlignLeft = document.getElementById('btnAlignLeft');
   const btnAlignCenter = document.getElementById('btnAlignCenter');
   const btnAlignRight = document.getElementById('btnAlignRight');
@@ -52,15 +76,18 @@
   const modalCloseBtn = document.getElementById('modalCloseBtn');
   const lblDate = document.getElementById('lblDate');
 
-  // Initialize
+  // --------------------------------------------------------------------------
+  // Initialization
+  // --------------------------------------------------------------------------
   function init() {
-    // Set current date
     if (lblDate) {
       lblDate.textContent = new Date().toISOString().slice(0, 10);
     }
 
     setupEventListeners();
     setupClipboardListener();
+    loadHistoryFromStorage();
+    restoreActiveDraft();
   }
 
   // --------------------------------------------------------------------------
@@ -68,160 +95,201 @@
   // --------------------------------------------------------------------------
   function setupEventListeners() {
     // Add Text button
-    btnAddText.addEventListener('click', (e) => {
-      e.stopPropagation();
-      addTextElement('New text here...', 80, 220, 24, 'center');
-    });
+    if (btnAddText) {
+      btnAddText.addEventListener('click', (e) => {
+        e.stopPropagation();
+        addTextElement('New text here...', 80, 220, 24, 'center', 0);
+        triggerAutoSave();
+      });
+    }
+
+    // New Canvas button in toolbar
+    if (btnNewCanvas) {
+      btnNewCanvas.addEventListener('click', () => {
+        startNewCanvas();
+      });
+    }
+
+    // New Canvas button in sidebar
+    if (btnNewCanvasSidebar) {
+      btnNewCanvasSidebar.addEventListener('click', () => {
+        startNewCanvas();
+      });
+    }
+
+    // Toggle History Drawer / Sidebar
+    if (btnToggleHistory) {
+      btnToggleHistory.addEventListener('click', () => {
+        toggleHistorySidebar();
+      });
+    }
+
+    if (btnSidebarClose) {
+      btnSidebarClose.addEventListener('click', () => {
+        closeHistorySidebar();
+      });
+    }
+
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener('click', () => {
+        closeHistorySidebar();
+      });
+    }
 
     // Tap on empty space in container
-    elementsContainer.addEventListener('pointerdown', (e) => {
-      if (e.target === elementsContainer) {
-        deselectAll();
-      }
-    });
+    if (elementsContainer) {
+      elementsContainer.addEventListener('pointerdown', (e) => {
+        if (e.target === elementsContainer) {
+          deselectAll();
+        }
+      });
 
-    // Single click on empty canvas adds text; if elements exist, deselects
-    elementsContainer.addEventListener('click', (e) => {
-      if (e.target === elementsContainer && elements.length === 0) {
-        const rect = elementsContainer.getBoundingClientRect();
-        const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
-        const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
-        addTextElement('Your text...', x, y, 24, 'center');
-      }
-    });
+      // Single click on empty canvas adds text; if elements exist, deselects
+      elementsContainer.addEventListener('click', (e) => {
+        if (e.target === elementsContainer && elements.length === 0) {
+          const rect = elementsContainer.getBoundingClientRect();
+          const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
+          const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
+          addTextElement('Your text...', x, y, 24, 'center', 0);
+          triggerAutoSave();
+        }
+      });
 
-    // Double tap/click on empty space adds a text box at tap location
-    elementsContainer.addEventListener('dblclick', (e) => {
-      if (e.target === elementsContainer) {
-        const rect = elementsContainer.getBoundingClientRect();
-        const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
-        const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
-        addTextElement('Your text', x, y, 22, 'left');
-      }
-    });
+      // Double tap/click on empty space adds a text box at tap location
+      elementsContainer.addEventListener('dblclick', (e) => {
+        if (e.target === elementsContainer) {
+          const rect = elementsContainer.getBoundingClientRect();
+          const x = Math.max(10, Math.min(e.clientX - rect.left - 60, CANVAS_WIDTH - 150));
+          const y = Math.max(10, Math.min(e.clientY - rect.top - 20, CANVAS_HEIGHT - 60));
+          addTextElement('Your text', x, y, 22, 'left', 0);
+          triggerAutoSave();
+        }
+      });
+    }
 
     // Upload Image
-    imageInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        processUploadedFile(file);
-      }
-      imageInput.value = '';
-    });
+    if (imageInput) {
+      imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          processUploadedFile(file);
+        }
+        imageInput.value = '';
+      });
+    }
 
-    // Paste button (calls Clipboard API if available)
-    btnPasteImage.addEventListener('click', async () => {
-      try {
-        if (navigator.clipboard && navigator.clipboard.read) {
-          const items = await navigator.clipboard.read();
-          for (const item of items) {
-            const imgType = item.types.find((t) => t.startsWith('image/'));
-            if (imgType) {
-              const blob = await item.getType(imgType);
-              processUploadedFile(blob);
-              return;
+    // Paste button (mobile Safari / iPad clipboard API fallback)
+    if (btnPasteImage) {
+      btnPasteImage.addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.read) {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+              const imgType = item.types.find(t => t.startsWith('image/'));
+              if (imgType) {
+                const blob = await item.getType(imgType);
+                processUploadedFile(blob);
+                return;
+              }
             }
           }
+          alert("To paste an image: Press Cmd+V / Ctrl+V, or tap 'Add Image' to pick from gallery!");
+        } catch (err) {
+          alert("To paste an image: Press Cmd+V / Ctrl+V, or tap 'Add Image' to choose a photo!");
         }
-        alert("Clipboard tip: Press Cmd+V / Ctrl+V to paste an image, or tap 'Add Image' to upload from Photos!");
-      } catch (err) {
-        alert("To paste an image: Use Cmd+V / Ctrl+V, or tap 'Add Image' to choose from your gallery!");
-      }
-    });
+      });
+    }
 
-    // Dither mode toggle
-    btnDitherMode.addEventListener('click', () => {
-      isPhotoDither = !isPhotoDither;
-      if (isPhotoDither) {
-        btnDitherMode.classList.add('active');
-        ditherModeText.textContent = 'Dither: Photo';
-      } else {
-        btnDitherMode.classList.remove('active');
-        ditherModeText.textContent = 'Dither: Sharp';
-      }
-    });
+    // Dither mode toggle (Photo Floyd-Steinberg vs High-contrast)
+    if (btnDitherMode) {
+      btnDitherMode.addEventListener('click', () => {
+        isPhotoDither = !isPhotoDither;
+        if (isPhotoDither) {
+          btnDitherMode.classList.add('active');
+          if (ditherModeText) ditherModeText.textContent = 'Dither: Photo';
+        } else {
+          btnDitherMode.classList.remove('active');
+          if (ditherModeText) ditherModeText.textContent = 'Dither: Sharp';
+        }
+      });
+    }
 
-    // Clear Canvas
-    btnClear.addEventListener('click', () => {
-      if (elements.length > 0 && confirm('Clear the label canvas?')) {
-        elements.forEach(el => el.domNode.remove());
-        elements = [];
-        deselectAll();
-      }
-    });
+    // Clear canvas
+    if (btnClear) {
+      btnClear.addEventListener('click', () => {
+        if (elements.length === 0) return;
+        if (confirm("Clear this label? (Your previous labels remain safe in History)")) {
+          startNewCanvas();
+        }
+      });
+    }
 
-    // Print Button
-    btnPrint.addEventListener('click', handlePrintSubmission);
+    // Print to Desk
+    if (btnPrint) {
+      btnPrint.addEventListener('click', () => {
+        handlePrintSubmission();
+      });
+    }
 
-    // Inspector Controls
-    btnSizeDown.addEventListener('click', (e) => {
-      e.stopPropagation();
-      adjustSelectedSize(-2);
-    });
-    btnSizeUp.addEventListener('click', (e) => {
-      e.stopPropagation();
-      adjustSelectedSize(2);
-    });
-    btnAlignLeft.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setSelectedAlign('left');
-    });
-    btnAlignCenter.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setSelectedAlign('center');
-    });
-    btnAlignRight.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setSelectedAlign('right');
-    });
-    btnDeleteElem.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteSelectedElement();
-    });
+    // Inspector button bindings
+    if (btnSizeDown) btnSizeDown.addEventListener('click', () => adjustSelectedSize(-2));
+    if (btnSizeUp) btnSizeUp.addEventListener('click', () => adjustSelectedSize(2));
+    if (btnRotateCCW) btnRotateCCW.addEventListener('click', () => rotateSelectedBy(-15));
+    if (btnRotateCW) btnRotateCW.addEventListener('click', () => rotateSelectedBy(15));
+    if (btnRotate90) btnRotate90.addEventListener('click', () => rotateSelectedBy(90));
+    if (btnAlignLeft) btnAlignLeft.addEventListener('click', () => setSelectedAlign('left'));
+    if (btnAlignCenter) btnAlignCenter.addEventListener('click', () => setSelectedAlign('center'));
+    if (btnAlignRight) btnAlignRight.addEventListener('click', () => setSelectedAlign('right'));
+    if (btnDeleteElem) btnDeleteElem.addEventListener('click', () => deleteSelectedElement());
 
-    // Dismiss modal
-    modalCloseBtn.addEventListener('click', () => {
-      statusModal.classList.add('hidden');
-    });
+    if (modalCloseBtn) {
+      modalCloseBtn.addEventListener('click', () => {
+        statusModal.classList.add('hidden');
+      });
+    }
   }
 
-  // --------------------------------------------------------------------------
-  // Global Clipboard (Cmd+V / Ctrl+V)
-  // --------------------------------------------------------------------------
+  // Global Clipboard Listener (Cmd+V / Ctrl+V anywhere on window)
   function setupClipboardListener() {
     window.addEventListener('paste', (e) => {
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
       for (const item of items) {
-        if (item.type.indexOf('image') === 0) {
-          const blob = item.getAsFile();
-          processUploadedFile(blob);
-          e.preventDefault();
-          break;
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            processUploadedFile(file);
+            return;
+          }
         }
       }
     });
   }
 
+  // --------------------------------------------------------------------------
+  // Image Processing & Floyd-Steinberg Dithering (1:1 Printhead Micro-Dots)
+  // --------------------------------------------------------------------------
   function processUploadedFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        // Automatically dither image to black & white thermal dots
         const ditheredDataUrl = convertImageToDithered(img, isPhotoDither);
-        addImageElement(ditheredDataUrl, img.width, img.height);
+        addImageElement(ditheredDataUrl, img.width, img.height, 0);
+        triggerAutoSave();
       };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
   }
 
-  // --------------------------------------------------------------------------
-  // Monochrome Dithering Algorithm (Floyd-Steinberg / Threshold)
-  // --------------------------------------------------------------------------
+  /**
+   * Converts an image to 1-bit monochrome using Floyd-Steinberg error diffusion.
+   * Dithers at up to 1200px native resolution matching the full physical 800x1200
+   * printhead matrix (960,000 discrete micro-dots).
+   */
   function convertImageToDithered(img, useDither = true) {
-    // Determine max dimension for canvas (max 400px wide/high)
-    const maxDim = 400;
+    const maxDim = 1200; // Native high-res printhead resolution
     let w = img.width;
     let h = img.height;
     if (w > maxDim || h > maxDim) {
@@ -298,13 +366,14 @@
   // --------------------------------------------------------------------------
   // Text Element Management
   // --------------------------------------------------------------------------
-  function addTextElement(text, x, y, fontSize = 24, align = 'center') {
+  function addTextElement(text, x, y, fontSize = 24, align = 'center', rotation = 0) {
     const id = 'el_' + nextElementId++;
     const el = document.createElement('div');
     el.className = 'canvas-element';
     el.dataset.id = id;
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
+    el.style.transform = `rotate(${rotation || 0}deg)`;
 
     const content = document.createElement('div');
     content.className = 'canvas-text-content';
@@ -314,7 +383,17 @@
     content.style.textAlign = align;
     content.innerText = text;
 
+    // Rotation Handle & Stem
+    const stem = document.createElement('div');
+    stem.className = 'rotate-stem';
+    const rotateHandle = document.createElement('div');
+    rotateHandle.className = 'rotate-handle';
+    rotateHandle.title = 'Drag to rotate';
+    rotateHandle.innerHTML = '&#8635;';
+
     el.appendChild(content);
+    el.appendChild(stem);
+    el.appendChild(rotateHandle);
     elementsContainer.appendChild(el);
 
     const record = {
@@ -324,15 +403,17 @@
       y,
       fontSize,
       align,
+      rotation: rotation || 0,
       domNode: el,
       contentNode: content
     };
     elements.push(record);
 
     attachDragListeners(el, record);
+    attachRotateListener(rotateHandle, record);
 
     content.addEventListener('input', () => {
-      // keep track of changes
+      triggerAutoSave();
     });
 
     selectElement(record);
@@ -343,38 +424,53 @@
   // --------------------------------------------------------------------------
   // Image Element Management
   // --------------------------------------------------------------------------
-  function addImageElement(dataUrl, origW, origH) {
+  function addImageElement(dataUrl, origW, origH, rotation = 0, initialW = null, initialH = null, xPos = null, yPos = null) {
     const id = 'el_' + nextElementId++;
     const el = document.createElement('div');
     el.className = 'canvas-element';
     el.dataset.id = id;
 
-    // Scale to fit canvas nicely (e.g. max width 220px)
-    const maxInitW = 220;
-    let w = origW;
-    let h = origH;
-    if (w > maxInitW) {
-      h = Math.round((h * maxInitW) / w);
-      w = maxInitW;
+    // Display sizing (fit cleanly on 400x600 screen canvas)
+    let w = initialW;
+    let h = initialH;
+    if (!w || !h) {
+      const maxInitW = 220;
+      w = origW;
+      h = origH;
+      if (w > maxInitW) {
+        h = Math.round((h * maxInitW) / w);
+        w = maxInitW;
+      }
     }
 
-    const x = Math.max(10, Math.round((CANVAS_WIDTH - w) / 2));
-    const y = Math.max(10, Math.round((CANVAS_HEIGHT - h) / 2));
+    const x = xPos !== null ? xPos : Math.max(10, Math.round((CANVAS_WIDTH - w) / 2));
+    const y = yPos !== null ? yPos : Math.max(10, Math.round((CANVAS_HEIGHT - h) / 2));
 
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
     el.style.width = `${w}px`;
     el.style.height = `${h}px`;
+    el.style.transform = `rotate(${rotation || 0}deg)`;
 
     const img = document.createElement('img');
     img.className = 'canvas-img-content';
     img.src = dataUrl;
 
-    const handle = document.createElement('div');
-    handle.className = 'resize-handle';
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'resize-handle';
+    resizeHandle.title = 'Drag to resize';
+
+    const stem = document.createElement('div');
+    stem.className = 'rotate-stem';
+    const rotateHandle = document.createElement('div');
+    rotateHandle.className = 'rotate-handle';
+    rotateHandle.title = 'Drag to rotate';
+    rotateHandle.innerHTML = '&#8635;';
 
     el.appendChild(img);
-    el.appendChild(handle);
+    el.appendChild(resizeHandle);
+    el.appendChild(stem);
+    el.appendChild(rotateHandle);
     elementsContainer.appendChild(el);
 
     const record = {
@@ -385,6 +481,7 @@
       width: w,
       height: h,
       aspectRatio: origW / origH,
+      rotation: rotation || 0,
       dataUrl,
       domNode: el,
       imgNode: img
@@ -392,14 +489,15 @@
     elements.push(record);
 
     attachDragListeners(el, record);
-    attachResizeListener(handle, record);
+    attachResizeListener(resizeHandle, record);
+    attachRotateListener(rotateHandle, record);
 
     selectElement(record);
     return record;
   }
 
   // --------------------------------------------------------------------------
-  // Draggable Behavior (Touch & Mouse with Pointer Events)
+  // Draggable Behavior (Touch & Mouse)
   // --------------------------------------------------------------------------
   function attachDragListeners(node, record) {
     let isDragging = false;
@@ -409,8 +507,8 @@
     let initTop = 0;
 
     node.addEventListener('pointerdown', (e) => {
-      // If clicking resize handle, ignore drag
-      if (e.target.classList.contains('resize-handle')) return;
+      // If clicking handles, ignore element drag
+      if (e.target.classList.contains('resize-handle') || e.target.classList.contains('rotate-handle')) return;
 
       selectElement(record);
       isDragging = true;
@@ -431,7 +529,6 @@
       let newX = initLeft + dx;
       let newY = initTop + dy;
 
-      // Soft clamp within stage bounds
       newX = Math.max(-50, Math.min(CANVAS_WIDTH - 20, newX));
       newY = Math.max(-20, Math.min(CANVAS_HEIGHT - 30, newY));
 
@@ -447,6 +544,7 @@
         try {
           node.releasePointerCapture(e.pointerId);
         } catch (ignored) {}
+        triggerAutoSave();
       }
     };
 
@@ -454,7 +552,9 @@
     node.addEventListener('pointercancel', stopDrag);
   }
 
-  // Resize handle listener
+  // --------------------------------------------------------------------------
+  // Resize Handle Listener
+  // --------------------------------------------------------------------------
   function attachResizeListener(handle, record) {
     let isResizing = false;
     let startX = 0;
@@ -486,11 +586,68 @@
         try {
           handle.releasePointerCapture(e.pointerId);
         } catch (ignored) {}
+        triggerAutoSave();
       }
     };
 
     handle.addEventListener('pointerup', stopResize);
     handle.addEventListener('pointercancel', stopResize);
+  }
+
+  // --------------------------------------------------------------------------
+  // Rotation Handle Listener (Interactive Touch/Mouse Knob)
+  // --------------------------------------------------------------------------
+  function attachRotateListener(handle, record) {
+    let isRotating = false;
+    let centerScreenX = 0;
+    let centerScreenY = 0;
+    let startAngle = 0;
+    let initialRotation = 0;
+
+    handle.addEventListener('pointerdown', (e) => {
+      isRotating = true;
+      const rect = record.domNode.getBoundingClientRect();
+      centerScreenX = rect.left + rect.width / 2;
+      centerScreenY = rect.top + rect.height / 2;
+      initialRotation = record.rotation || 0;
+      startAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * 180 / Math.PI;
+
+      handle.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if (!isRotating) return;
+      const currentAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * 180 / Math.PI;
+      let delta = currentAngle - startAngle;
+      let angle = (initialRotation + delta) % 360;
+      if (angle < 0) angle += 360;
+
+      // Magnetic snap to cardinal 45° and 90° angles within 5 degrees
+      for (let snap = 0; snap < 360; snap += 45) {
+        if (Math.abs(angle - snap) < 5 || Math.abs(angle - snap) > 355) {
+          angle = snap;
+          break;
+        }
+      }
+
+      record.rotation = Math.round(angle);
+      record.domNode.style.transform = `rotate(${record.rotation}deg)`;
+      updateInspectorRotateBadge(record.rotation);
+    });
+
+    const stopRotate = (e) => {
+      if (isRotating) {
+        isRotating = false;
+        try {
+          handle.releasePointerCapture(e.pointerId);
+        } catch (ignored) {}
+        triggerAutoSave();
+      }
+    };
+
+    handle.addEventListener('pointerup', stopRotate);
+    handle.addEventListener('pointercancel', stopRotate);
   }
 
   // --------------------------------------------------------------------------
@@ -510,16 +667,25 @@
   }
 
   function showInspector(record) {
+    if (!elementControls) return;
     elementControls.classList.remove('hidden');
-    // Hide alignment for images
+
     const isText = record.type === 'text';
-    btnAlignLeft.style.display = isText ? 'inline-flex' : 'none';
-    btnAlignCenter.style.display = isText ? 'inline-flex' : 'none';
-    btnAlignRight.style.display = isText ? 'inline-flex' : 'none';
+    if (btnAlignLeft) btnAlignLeft.style.display = isText ? 'inline-flex' : 'none';
+    if (btnAlignCenter) btnAlignCenter.style.display = isText ? 'inline-flex' : 'none';
+    if (btnAlignRight) btnAlignRight.style.display = isText ? 'inline-flex' : 'none';
+
+    updateInspectorRotateBadge(record.rotation || 0);
   }
 
   function hideInspector() {
-    elementControls.classList.add('hidden');
+    if (elementControls) elementControls.classList.add('hidden');
+  }
+
+  function updateInspectorRotateBadge(deg) {
+    if (rotateDegreeBadge) {
+      rotateDegreeBadge.textContent = `${Math.round(deg || 0)}°`;
+    }
   }
 
   function adjustSelectedSize(delta) {
@@ -535,12 +701,24 @@
       selectedElement.domNode.style.width = `${newW}px`;
       selectedElement.domNode.style.height = `${newH}px`;
     }
+    triggerAutoSave();
+  }
+
+  function rotateSelectedBy(delta) {
+    if (!selectedElement) return;
+    let angle = ((selectedElement.rotation || 0) + delta) % 360;
+    if (angle < 0) angle += 360;
+    selectedElement.rotation = Math.round(angle);
+    selectedElement.domNode.style.transform = `rotate(${selectedElement.rotation}deg)`;
+    updateInspectorRotateBadge(selectedElement.rotation);
+    triggerAutoSave();
   }
 
   function setSelectedAlign(align) {
     if (!selectedElement || selectedElement.type !== 'text') return;
     selectedElement.align = align;
     selectedElement.contentNode.style.textAlign = align;
+    triggerAutoSave();
   }
 
   function deleteSelectedElement() {
@@ -548,10 +726,356 @@
     selectedElement.domNode.remove();
     elements = elements.filter(r => r.id !== selectedElement.id);
     deselectAll();
+    triggerAutoSave();
   }
 
   // --------------------------------------------------------------------------
-  // Composite & Submission to Cloudflare
+  // Auto-Save Session Persistence (localStorage)
+  // --------------------------------------------------------------------------
+  function triggerAutoSave() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+      saveActiveDraft();
+    }, 250);
+  }
+
+  function saveActiveDraft() {
+    const serializedElements = elements.map(el => ({
+      id: el.id,
+      type: el.type,
+      x: el.x,
+      y: el.y,
+      rotation: el.rotation || 0,
+      fontSize: el.fontSize,
+      align: el.align,
+      text: el.type === 'text' ? el.contentNode.innerText : undefined,
+      width: el.width,
+      height: el.height,
+      aspectRatio: el.aspectRatio,
+      dataUrl: el.dataUrl
+    }));
+
+    const state = {
+      elements: serializedElements,
+      updatedAt: Date.now()
+    };
+
+    try {
+      localStorage.setItem(STORAGE_DRAFT_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.warn('LocalStorage save failed:', err);
+    }
+  }
+
+  function restoreActiveDraft() {
+    try {
+      const raw = localStorage.getItem(STORAGE_DRAFT_KEY);
+      if (!raw) return;
+      const state = JSON.parse(raw);
+      if (state && Array.isArray(state.elements) && state.elements.length > 0) {
+        restoreCanvasFromState(state);
+      }
+    } catch (err) {
+      console.warn('Failed to restore active draft:', err);
+    }
+  }
+
+  function restoreCanvasFromState(state) {
+    // Clear current DOM elements
+    deselectAll();
+    elementsContainer.innerHTML = '';
+    elements = [];
+    nextElementId = 1;
+
+    for (const item of state.elements) {
+      if (item.type === 'text') {
+        addTextElement(item.text || '', item.x, item.y, item.fontSize || 24, item.align || 'center', item.rotation || 0);
+      } else if (item.type === 'image' && item.dataUrl) {
+        addImageElement(item.dataUrl, item.width || 200, item.height || 200, item.rotation || 0, item.width, item.height, item.x, item.y);
+      }
+    }
+    deselectAll();
+  }
+
+  // --------------------------------------------------------------------------
+  // Past Canvases History System
+  // --------------------------------------------------------------------------
+  function loadHistoryFromStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_HISTORY_KEY);
+      if (raw) {
+        historyListItems = JSON.parse(raw) || [];
+      }
+    } catch (err) {
+      historyListItems = [];
+    }
+    renderHistorySidebar();
+  }
+
+  function saveHistoryToStorage() {
+    try {
+      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(historyListItems));
+    } catch (err) {
+      console.warn('Failed to save history to localStorage:', err);
+    }
+    renderHistorySidebar();
+  }
+
+  /**
+   * Generates a lightweight 100x150 thumbnail snapshot from the current stage.
+   */
+  async function generateThumbnail() {
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = 100;
+    thumbCanvas.height = 150;
+    const ctx = thumbCanvas.getContext('2d');
+
+    // Solid white label background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 100, 150);
+
+    const scaleX = 100 / CANVAS_WIDTH;
+    const scaleY = 150 / CANVAS_HEIGHT;
+
+    for (const el of elements) {
+      if (el.type === 'image') {
+        await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const w = el.width * scaleX;
+            const h = el.height * scaleY;
+            const cx = (el.x * scaleX) + (w / 2);
+            const cy = (el.y * scaleY) + (h / 2);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+            ctx.drawImage(img, -w / 2, -h / 2, w, h);
+            ctx.restore();
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = el.dataUrl;
+        });
+      } else if (el.type === 'text') {
+        const text = el.contentNode.innerText;
+        const lines = text.split('\n');
+        const fontSize = el.fontSize * scaleX;
+        const lineHeight = fontSize * 1.25;
+        const totalHeight = lines.length * lineHeight;
+
+        const domW = el.domNode.offsetWidth || 80;
+        const domH = el.domNode.offsetHeight || totalHeight / scaleY;
+        const cx = (el.x + domW / 2) * scaleX;
+        const cy = (el.y + domH / 2) * scaleY;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
+
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.fillStyle = '#000000';
+        const startY = -(totalHeight / 2) + fontSize * 0.85;
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const y = startY + (i * lineHeight);
+          if (el.align === 'center') {
+            const tw = ctx.measureText(line).width;
+            ctx.fillText(line, -(tw / 2), y);
+          } else if (el.align === 'right') {
+            const tw = ctx.measureText(line).width;
+            ctx.fillText(line, (domW * scaleX / 2) - tw, y);
+          } else {
+            ctx.fillText(line, -(domW * scaleX / 2), y);
+          }
+        }
+        ctx.restore();
+      }
+    }
+
+    return thumbCanvas.toDataURL('image/jpeg', 0.85);
+  }
+
+  async function saveSnapshotToHistory(reason = 'Saved') {
+    if (elements.length === 0) return null;
+
+    const thumb = await generateThumbnail();
+    const textSummary = elements
+      .filter(e => e.type === 'text')
+      .map(e => e.contentNode.innerText.trim())
+      .filter(t => t.length > 0)
+      .join(' | ') || (elements.some(e => e.type === 'image') ? 'Image Composition' : 'Untitled Label');
+
+    const serializedElements = elements.map(el => ({
+      id: el.id,
+      type: el.type,
+      x: el.x,
+      y: el.y,
+      rotation: el.rotation || 0,
+      fontSize: el.fontSize,
+      align: el.align,
+      text: el.type === 'text' ? el.contentNode.innerText : undefined,
+      width: el.width,
+      height: el.height,
+      aspectRatio: el.aspectRatio,
+      dataUrl: el.dataUrl
+    }));
+
+    const snapshotId = 'snap_' + Date.now();
+    const snapshot = {
+      id: snapshotId,
+      timestamp: Date.now(),
+      summary: textSummary,
+      elementCount: elements.length,
+      thumbnail: thumb,
+      elements: serializedElements
+    };
+
+    historyListItems.unshift(snapshot);
+    if (historyListItems.length > 30) {
+      historyListItems = historyListItems.slice(0, 30);
+    }
+
+    activeSnapshotId = snapshotId;
+    saveHistoryToStorage();
+    return snapshotId;
+  }
+
+  function loadSnapshot(snapshotId) {
+    const snap = historyListItems.find(s => s.id === snapshotId);
+    if (!snap) return;
+
+    // Auto-save current work first if not already saved
+    if (elements.length > 0 && activeSnapshotId !== snapshotId) {
+      saveSnapshotToHistory('Draft Auto-Archive');
+    }
+
+    activeSnapshotId = snapshotId;
+    restoreCanvasFromState(snap);
+    triggerAutoSave();
+    renderHistorySidebar();
+    closeHistorySidebar();
+  }
+
+  function deleteSnapshot(snapshotId, e) {
+    if (e) e.stopPropagation();
+    historyListItems = historyListItems.filter(s => s.id !== snapshotId);
+    if (activeSnapshotId === snapshotId) activeSnapshotId = null;
+    saveHistoryToStorage();
+  }
+
+  function startNewCanvas() {
+    if (elements.length > 0) {
+      saveSnapshotToHistory('Saved Before New');
+    }
+    deselectAll();
+    elementsContainer.innerHTML = '';
+    elements = [];
+    nextElementId = 1;
+    activeSnapshotId = null;
+    localStorage.removeItem(STORAGE_DRAFT_KEY);
+    renderHistorySidebar();
+    closeHistorySidebar();
+  }
+
+  function renderHistorySidebar() {
+    const container = document.getElementById('historyContainer');
+    const badge = document.getElementById('historyBadge');
+    if (badge) {
+      badge.textContent = historyListItems.length;
+    }
+    if (!container) return;
+
+    if (historyListItems.length === 0) {
+      container.innerHTML = `
+        <div class="history-empty">
+          <span style="font-size: 20px;">🏷️</span><br/>
+          <strong style="display:block; margin: 4px 0;">No saved labels yet</strong>
+          <span>Labels you print or design will be saved here automatically.</span>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = historyListItems.map(item => {
+      const dateStr = new Date(item.timestamp).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      const isActive = item.id === activeSnapshotId;
+
+      return `
+        <div class="history-card ${isActive ? 'active' : ''}" data-id="${item.id}">
+          <img src="${item.thumbnail}" class="history-card-thumb" alt="Thumbnail" />
+          <div class="history-card-body">
+            <div class="history-card-date">${dateStr}</div>
+            <div class="history-card-snippet" title="${escapeHtml(item.summary)}">${escapeHtml(item.summary)}</div>
+            <div class="history-card-footer">
+              <span class="history-elem-badge">${item.elementCount} elem${item.elementCount === 1 ? '' : 's'}</span>
+              <button class="btn-delete-history" data-delete-id="${item.id}" title="Delete this label">&#10005;</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Attach card click listeners
+    const cards = container.querySelectorAll('.history-card');
+    cards.forEach(card => {
+      card.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('.btn-delete-history');
+        if (delBtn) {
+          const delId = delBtn.dataset.deleteId;
+          deleteSnapshot(delId, e);
+          return;
+        }
+        const id = card.dataset.id;
+        loadSnapshot(id);
+      });
+    });
+  }
+
+  function toggleHistorySidebar() {
+    const sidebar = document.getElementById('historySidebar');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+      closeHistorySidebar();
+    } else {
+      openHistorySidebar();
+    }
+  }
+
+  function openHistorySidebar() {
+    const sidebar = document.getElementById('historySidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
+  }
+
+  function closeHistorySidebar() {
+    const sidebar = document.getElementById('historySidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag));
+  }
+
+  // --------------------------------------------------------------------------
+  // Composite & Submission to Cloudflare & Thermal Printer
   // --------------------------------------------------------------------------
   async function handlePrintSubmission() {
     if (isSubmitting) return;
@@ -565,8 +1089,10 @@
     isSubmitting = true;
     btnPrint.disabled = true;
 
-    // Show Progress Modal
-    showModal('Rendering 4x6 Label...', 'Compositing high-contrast thermal raster dots (800x1200)...', 25);
+    // Auto-save snapshot into history on physical print
+    saveSnapshotToHistory('Printed Label');
+
+    showModal('Rendering 4x6 Label...', 'Compositing ultra-detail thermal raster dots (800x1200)...', 25);
 
     try {
       // 1. Render full 800x1200 high-res canvas
@@ -579,11 +1105,11 @@
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
-      // Scale factor from display to physical printhead
-      const scaleX = PRINT_WIDTH / CANVAS_WIDTH;   // 800 / 400 = 2.0
-      const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT; // 1200 / 600 = 2.0
+      // Scale factor from display to physical printhead (800/400 = 2.0, 1200/600 = 2.0)
+      const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
+      const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
-      // Draw user elements
+      // Draw user elements with matrix rotation
       for (const el of elements) {
         if (el.type === 'image') {
           await drawImageElementToCanvas(ctx, el, scaleX, scaleY);
@@ -592,23 +1118,22 @@
         }
       }
 
-      // Small watermark in the corner: "made by noahsmith.dev"
+      // Discreet corner watermark: "made by noahsmith.dev"
       ctx.fillStyle = '#000000';
       ctx.font = '16px monospace';
       const watermark = 'made by noahsmith.dev';
       const wmWidth = ctx.measureText(watermark).width;
       ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
 
-      // Final 1-bit threshold pass to guarantee pure monochrome
+      // Final 1-bit threshold pass to guarantee pure monochrome dots
       enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT);
 
       // Export compressed monochrome PNG
       const pngDataUrl = printCanvas.toDataURL('image/png');
 
-      // 2. Submit to Cloudflare Worker
+      // 2. Submit to Cloudflare Worker Queue
       updateModal('Sending to Bridge...', 'Transmitting payload through Cloudflare Queue to Android phone...', 50);
 
-      // Create a short text summary for logging
       const textSummary = elements
         .filter(e => e.type === 'text')
         .map(e => e.contentNode.innerText.trim())
@@ -650,11 +1175,18 @@
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const x = el.x * scaleX;
-        const y = el.y * scaleY;
         const w = el.width * scaleX;
         const h = el.height * scaleY;
-        ctx.drawImage(img, x, y, w, h);
+        const cx = (el.x * scaleX) + (w / 2);
+        const cy = (el.y * scaleY) + (h / 2);
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (el.rotation) {
+          ctx.rotate((el.rotation * Math.PI) / 180);
+        }
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+        ctx.restore();
         resolve();
       };
       img.onerror = () => resolve();
@@ -665,13 +1197,30 @@
   function drawTextElementToCanvas(ctx, el, scaleX, scaleY) {
     const text = el.contentNode.innerText;
     const lines = text.split('\n');
-    const fontSize = el.fontSize * scaleX; // scale font size
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    ctx.fillStyle = '#000000';
-
+    const fontSize = el.fontSize * scaleX;
     const lineHeight = fontSize * 1.25;
-    const startX = el.x * scaleX;
-    const startY = (el.y * scaleY) + fontSize; // canvas baseline
+    const totalHeight = lines.length * lineHeight;
+
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    let maxLineWidth = 0;
+    for (const line of lines) {
+      const tw = ctx.measureText(line).width;
+      if (tw > maxLineWidth) maxLineWidth = tw;
+    }
+
+    const domW = (el.domNode.offsetWidth || (maxLineWidth / scaleX) + 12);
+    const domH = (el.domNode.offsetHeight || (totalHeight / scaleY) + 8);
+    const cx = (el.x + domW / 2) * scaleX;
+    const cy = (el.y + domH / 2) * scaleY;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (el.rotation) {
+      ctx.rotate((el.rotation * Math.PI) / 180);
+    }
+
+    ctx.fillStyle = '#000000';
+    const startY = -(totalHeight / 2) + fontSize * 0.85;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -679,14 +1228,15 @@
 
       if (el.align === 'center') {
         const textW = ctx.measureText(line).width;
-        ctx.fillText(line, startX - (textW / 2), y);
+        ctx.fillText(line, -(textW / 2), y);
       } else if (el.align === 'right') {
         const textW = ctx.measureText(line).width;
-        ctx.fillText(line, startX - textW, y);
+        ctx.fillText(line, (domW * scaleX / 2) - textW - 6, y);
       } else {
-        ctx.fillText(line, startX, y);
+        ctx.fillText(line, -(domW * scaleX / 2) + 6, y);
       }
     }
+    ctx.restore();
   }
 
   function enforceStrictMonochrome(ctx, w, h) {
@@ -703,10 +1253,9 @@
     ctx.putImageData(imgData, 0, 0);
   }
 
-  // Poll print completion
-  async function pollPrintStatus(quoteId) {
-    const maxChecks = 30; // 30 * 2s = 60s max
+  function pollPrintStatus(quoteId) {
     let checks = 0;
+    const maxChecks = 30;
 
     const interval = setInterval(async () => {
       checks++;
@@ -726,35 +1275,37 @@
 
       if (checks >= maxChecks) {
         clearInterval(interval);
-        updateModal('Queued for Print', 'Your label is safe in the queue and will print as soon as the bridge checks in!', 100, true);
+        updateModal('Queued for Print', 'Your label is in the queue and will print as soon as the bridge checks in.', 100, true);
         isSubmitting = false;
         btnPrint.disabled = false;
       }
     }, 2000);
   }
 
-  // --------------------------------------------------------------------------
-  // Modal Utilities
-  // --------------------------------------------------------------------------
   function showModal(title, desc, progress) {
+    if (!statusModal) return;
     statusModal.classList.remove('hidden');
-    modalCloseBtn.classList.add('hidden');
-    updateModal(title, desc, progress, false);
+    if (modalCloseBtn) modalCloseBtn.classList.add('hidden');
+    if (modalTitle) modalTitle.textContent = title;
+    if (modalDesc) modalDesc.textContent = desc;
+    if (modalProgressBar) modalProgressBar.style.width = `${progress}%`;
   }
 
   function updateModal(title, desc, progress, showClose = false) {
-    modalTitle.textContent = title;
-    modalDesc.textContent = desc;
-    modalProgressBar.style.width = `${progress}%`;
-    if (showClose) {
+    if (!statusModal) return;
+    if (modalTitle) modalTitle.textContent = title;
+    if (modalDesc) modalDesc.textContent = desc;
+    if (modalProgressBar) modalProgressBar.style.width = `${progress}%`;
+    if (showClose && modalCloseBtn) {
       modalCloseBtn.classList.remove('hidden');
     }
   }
 
-  // Launch on DOM ready
+  // Boot on DOM ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
+
 })();
