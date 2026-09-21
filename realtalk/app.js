@@ -16,9 +16,9 @@
 
   // Configuration
   const WORKER_BASE_URL = 'https://realtalk-printer-bridge.super-disk-489b.workers.dev';
-  const CANVAS_WIDTH = 400; // CSS display pixels
+  const CANVAS_WIDTH = 432; // CSS display pixels (108mm @ 864x1200 full bleed)
   const CANVAS_HEIGHT = 600;
-  const PRINT_WIDTH = 800; // Physical dots (203 DPI 4x6")
+  const PRINT_WIDTH = 864; // Physical dots (108mm / 4.25" @ 203 DPI edge-to-edge)
   const PRINT_HEIGHT = 1200;
   const STORAGE_DRAFT_KEY = 'realtalk_active_draft_v1';
   const STORAGE_HISTORY_KEY = 'realtalk_canvas_history_v1';
@@ -999,15 +999,15 @@
    */
   async function generateThumbnail() {
     const thumbCanvas = document.createElement('canvas');
-    thumbCanvas.width = 100;
+    thumbCanvas.width = 108;
     thumbCanvas.height = 150;
     const ctx = thumbCanvas.getContext('2d');
 
     // Solid white label background
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 100, 150);
+    ctx.fillRect(0, 0, 108, 150);
 
-    const scaleX = 100 / CANVAS_WIDTH;
+    const scaleX = 108 / CANVAS_WIDTH;
     const scaleY = 150 / CANVAS_HEIGHT;
 
     for (const el of elements) {
