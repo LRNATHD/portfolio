@@ -794,7 +794,7 @@
    * 3. Canvas algorithmic word-wrapping
    * 4. Safety validation pass to strictly prevent right-edge overflow
    */
-  function getWrappedTextLines(ctx, el, textMaxWidth) {
+  function getWrappedTextLines(ctx, el, availablePrintW) {
     let lines = null;
 
     if (el.contentNode) {
@@ -814,10 +814,10 @@
 
     const rawText = el.text || (el.contentNode ? el.contentNode.innerText : '') || '';
     if (!lines || lines.length === 0) {
-      lines = wrapTextParagraphs(rawText, (str) => ctx.measureText(str).width, textMaxWidth);
+      lines = wrapTextParagraphs(rawText, (str) => ctx.measureText(str).width, availablePrintW);
     }
 
-    // Safety validation pass: ensure no line exceeds textMaxWidth
+    // Safety validation pass: only rewrap if a line actually overflows the physical printable paper width
     const validated = [];
     for (const l of lines) {
       if (!l.trim()) {
@@ -825,10 +825,11 @@
         continue;
       }
       const tw = ctx.measureText(l).width;
-      if (tw <= textMaxWidth) {
+      // 8px tolerance buffer prevents spurious wraps from subpixel font rendering differences
+      if (tw <= availablePrintW + 8) {
         validated.push(l);
       } else {
-        const rewrapped = wrapTextParagraphs(l, (str) => ctx.measureText(str).width, textMaxWidth);
+        const rewrapped = wrapTextParagraphs(l, (str) => ctx.measureText(str).width, availablePrintW);
         validated.push(...rewrapped);
       }
     }
@@ -1833,16 +1834,22 @@
         const fontSize = (el.fontSize || 24) * scaleX;
         ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 
-        const maxAvailableScreenW = Math.max(60, CANVAS_WIDTH - el.x - 12);
-        const screenBoxW = el.width || (el.domNode ? el.domNode.offsetWidth : maxAvailableScreenW);
         const thumbStartX = Math.max(0, el.x * scaleX);
-        const thumbBoxW = Math.max(20, Math.min(screenBoxW * scaleX, 100 - thumbStartX - (2 * scaleX)));
-        const textMaxWidth = Math.max(15, thumbBoxW - (4 * scaleX));
+        const availableThumbW = Math.max(25, 100 - thumbStartX - (2 * scaleX));
 
-        const lines = getWrappedTextLines(ctx, el, textMaxWidth);
+        const lines = getWrappedTextLines(ctx, el, availableThumbW);
+        let maxLineWidth = 0;
+        for (const l of lines) {
+          const tw = ctx.measureText(l).width;
+          if (tw > maxLineWidth) maxLineWidth = tw;
+        }
+
+        const paddingX = 2 * scaleX;
+        const paddingY = 2 * scaleY;
+        const thumbBoxW = Math.min(maxLineWidth + (paddingX * 2), availableThumbW);
         const lineHeight = fontSize * 1.25;
         const totalHeight = lines.length * lineHeight;
-        const thumbBoxH = el.domNode ? (el.domNode.offsetHeight * scaleY) : (totalHeight + (4 * scaleY));
+        const thumbBoxH = el.domNode ? (el.domNode.offsetHeight * scaleY) : (totalHeight + (paddingY * 2));
 
         const cx = thumbStartX + (thumbBoxW / 2);
         const cy = (el.y * scaleY) + (thumbBoxH / 2);
@@ -1852,7 +1859,7 @@
         if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
 
         ctx.fillStyle = el.color || (isBlackBg ? '#ffffff' : '#000000');
-        const startY = -(thumbBoxH / 2) + (2 * scaleY) + (fontSize * 0.88);
+        const startY = -(thumbBoxH / 2) + paddingY + (fontSize * 0.88);
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
@@ -1863,10 +1870,10 @@
           if (el.align === 'center') {
             ctx.fillText(line, -(tw / 2), y);
           } else if (el.align === 'right') {
-            const rightEdge = (thumbBoxW / 2) - (2 * scaleX);
+            const rightEdge = (thumbBoxW / 2) - paddingX;
             ctx.fillText(line, rightEdge - tw, y);
           } else {
-            const leftEdge = -(thumbBoxW / 2) + (2 * scaleX);
+            const leftEdge = -(thumbBoxW / 2) + paddingX;
             ctx.fillText(line, leftEdge, y);
           }
         }
@@ -2546,17 +2553,24 @@
     const fontSize = (el.fontSize || 24) * scaleX;
     ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 
-    const maxAvailableScreenW = Math.max(60, CANVAS_WIDTH - el.x - 12);
-    const screenBoxW = el.width || (el.domNode ? el.domNode.offsetWidth : maxAvailableScreenW);
     const printStartX = Math.max(0, el.x * scaleX);
-    const printBoxW = Math.max(60 * scaleX, Math.min(screenBoxW * scaleX, PRINT_WIDTH - printStartX - (12 * scaleX)));
-    const textMaxWidth = Math.max(40 * scaleX, printBoxW - (12 * scaleX));
+    // Allow text to use the full printable width up to the right edge (with 10px margin)
+    const availablePaperW = Math.max(120 * scaleX, PRINT_WIDTH - printStartX - (10 * scaleX));
 
-    const lines = getWrappedTextLines(ctx, el, textMaxWidth);
+    const lines = getWrappedTextLines(ctx, el, availablePaperW);
 
+    let maxLineWidth = 0;
+    for (const l of lines) {
+      const tw = ctx.measureText(l).width;
+      if (tw > maxLineWidth) maxLineWidth = tw;
+    }
+
+    const paddingX = 6 * scaleX;
+    const paddingY = 4 * scaleY;
+    const printBoxW = Math.min(maxLineWidth + (paddingX * 2), availablePaperW);
     const lineHeight = fontSize * 1.25;
     const totalHeight = lines.length * lineHeight;
-    const printBoxH = el.height ? Math.max(el.height * scaleY, totalHeight + (12 * scaleY)) : (totalHeight + (12 * scaleY));
+    const printBoxH = el.height ? (el.height * scaleY) : (totalHeight + (paddingY * 2));
 
     const cx = printStartX + (printBoxW / 2);
     const cy = (el.y * scaleY) + (printBoxH / 2);
@@ -2568,7 +2582,7 @@
     }
 
     ctx.fillStyle = el.color || (isStickerBlackBg ? '#ffffff' : '#000000');
-    const startY = -(printBoxH / 2) + (6 * scaleY) + (fontSize * 0.88);
+    const startY = -(printBoxH / 2) + paddingY + (fontSize * 0.88);
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -2579,10 +2593,10 @@
       if (el.align === 'center') {
         ctx.fillText(line, -(tw / 2), y);
       } else if (el.align === 'right') {
-        const rightEdge = (printBoxW / 2) - (6 * scaleX);
+        const rightEdge = (printBoxW / 2) - paddingX;
         ctx.fillText(line, rightEdge - tw, y);
       } else {
-        const leftEdge = -(printBoxW / 2) + (6 * scaleX);
+        const leftEdge = -(printBoxW / 2) + paddingX;
         ctx.fillText(line, leftEdge, y);
       }
     }

@@ -331,14 +331,15 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  max-width: 440px;
+  width: auto;
+  max-width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   margin-bottom: 12px;
   gap: 8px;
+  box-sizing: border-box;
 }
 
 .sticker-strip-left,
@@ -346,6 +347,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .strip-label {
@@ -354,6 +356,12 @@ html, body {
   text-transform: uppercase;
   color: var(--text-secondary);
   letter-spacing: 0.3px;
+}
+
+@media (max-width: 520px) {
+  .strip-label {
+    display: none;
+  }
 }
 
 .sticker-tabs {
