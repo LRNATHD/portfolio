@@ -654,6 +654,189 @@
   }
 
   // --------------------------------------------------------------------------
+  // Text Line Wrapping & Measurement Utilities
+  // --------------------------------------------------------------------------
+
+  /**
+   * Extracts visual wrapped lines directly from an active contenteditable DOM element.
+   * Uses Range.getClientRects() to detect when the browser breaks text across lines.
+   */
+  function extractLinesFromDom(contentNode) {
+    if (!contentNode) return null;
+    const rawText = contentNode.innerText || '';
+    if (!rawText.trim()) return [];
+
+    const lines = [];
+    let currentLine = '';
+    let lastTop = null;
+    const range = document.createRange();
+
+    const walker = document.createTreeWalker(contentNode, NodeFilter.SHOW_TEXT);
+    let textNode;
+    const textNodes = [];
+    while ((textNode = walker.nextNode())) {
+      textNodes.push(textNode);
+    }
+
+    if (textNodes.length === 0) {
+      return rawText.split('\n');
+    }
+
+    for (const tn of textNodes) {
+      const val = tn.nodeValue || '';
+      for (let i = 0; i < val.length; i++) {
+        const ch = val[i];
+        if (ch === '\n' || ch === '\r') {
+          if (currentLine.trim()) lines.push(currentLine.trim());
+          currentLine = '';
+          lastTop = null;
+          continue;
+        }
+
+        try {
+          range.setStart(tn, i);
+          range.setEnd(tn, i + 1);
+          const rects = range.getClientRects();
+
+          if (rects.length > 0) {
+            const top = Math.round(rects[0].top);
+            if (lastTop === null) {
+              lastTop = top;
+            } else if (top > lastTop + 4) {
+              if (currentLine.trim()) {
+                lines.push(currentLine.trim());
+              }
+              currentLine = '';
+              lastTop = top;
+            }
+          }
+        } catch (ignored) {}
+
+        currentLine += ch;
+      }
+    }
+
+    if (currentLine.trim()) {
+      lines.push(currentLine.trim());
+    }
+
+    return lines.length > 0 ? lines : rawText.split('\n');
+  }
+
+  /**
+   * Pure algorithmic word-wrapping for canvas contexts.
+   * Breaks paragraphs by spaces and measures each word, with character-break fallback for long words.
+   */
+  function wrapTextParagraphs(text, measureFn, maxWidth) {
+    if (!text) return [];
+    const lines = [];
+    const paragraphs = text.split('\n');
+
+    for (const para of paragraphs) {
+      if (!para.trim()) {
+        lines.push('');
+        continue;
+      }
+      const words = para.trim().split(/\s+/);
+      let currentLine = '';
+
+      for (const word of words) {
+        if (!word) continue;
+
+        if (!currentLine) {
+          if (measureFn(word) <= maxWidth) {
+            currentLine = word;
+          } else {
+            let piece = '';
+            for (const char of word) {
+              if (measureFn(piece + char) <= maxWidth) {
+                piece += char;
+              } else {
+                if (piece) lines.push(piece);
+                piece = char;
+              }
+            }
+            currentLine = piece;
+          }
+        } else {
+          const testLine = currentLine + ' ' + word;
+          if (measureFn(testLine) <= maxWidth) {
+            currentLine = testLine;
+          } else {
+            lines.push(currentLine);
+            if (measureFn(word) <= maxWidth) {
+              currentLine = word;
+            } else {
+              let piece = '';
+              for (const char of word) {
+                if (measureFn(piece + char) <= maxWidth) {
+                  piece += char;
+                } else {
+                  if (piece) lines.push(piece);
+                  piece = char;
+                }
+              }
+              currentLine = piece;
+            }
+          }
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+    }
+
+    return lines;
+  }
+
+  /**
+   * Resolves wrapped lines for any text element with multi-tier fallback:
+   * 1. Live DOM Range inspection (exact screen match)
+   * 2. Serialized lines from project state
+   * 3. Canvas algorithmic word-wrapping
+   * 4. Safety validation pass to strictly prevent right-edge overflow
+   */
+  function getWrappedTextLines(ctx, el, textMaxWidth) {
+    let lines = null;
+
+    if (el.contentNode) {
+      try {
+        const domLines = extractLinesFromDom(el.contentNode);
+        if (domLines && domLines.length > 0) {
+          lines = domLines;
+        }
+      } catch (err) {
+        console.warn('DOM line extraction fallback:', err);
+      }
+    }
+
+    if ((!lines || lines.length === 0) && el.lines && Array.isArray(el.lines) && el.lines.length > 0) {
+      lines = el.lines;
+    }
+
+    const rawText = el.text || (el.contentNode ? el.contentNode.innerText : '') || '';
+    if (!lines || lines.length === 0) {
+      lines = wrapTextParagraphs(rawText, (str) => ctx.measureText(str).width, textMaxWidth);
+    }
+
+    // Safety validation pass: ensure no line exceeds textMaxWidth
+    const validated = [];
+    for (const l of lines) {
+      if (!l.trim()) {
+        validated.push('');
+        continue;
+      }
+      const tw = ctx.measureText(l).width;
+      if (tw <= textMaxWidth) {
+        validated.push(l);
+      } else {
+        const rewrapped = wrapTextParagraphs(l, (str) => ctx.measureText(str).width, textMaxWidth);
+        validated.push(...rewrapped);
+      }
+    }
+
+    return validated.length > 0 ? validated : [rawText];
+  }
+
+  // --------------------------------------------------------------------------
   // Text Element Management
   // --------------------------------------------------------------------------
   function addTextElement(text, x, y, fontSize = 24, align = 'center', rotation = 0, color = null) {
@@ -1283,21 +1466,33 @@
     const curSticker = project.stickers.find(s => s.id === project.activeId);
     if (!curSticker) return;
     curSticker.isBlackBg = isBlackBg;
-    curSticker.elements = elements.map(el => ({
-      id: el.id,
-      type: el.type,
-      x: el.x,
-      y: el.y,
-      rotation: el.rotation || 0,
-      fontSize: el.fontSize,
-      align: el.align,
-      color: el.color,
-      text: el.type === 'text' ? el.contentNode.innerText : undefined,
-      width: el.width,
-      height: el.height,
-      aspectRatio: el.aspectRatio,
-      dataUrl: el.dataUrl
-    }));
+    curSticker.elements = elements.map(el => {
+      const isText = el.type === 'text';
+      const domW = el.domNode ? el.domNode.offsetWidth : el.width;
+      const domH = el.domNode ? el.domNode.offsetHeight : el.height;
+      let domLines = undefined;
+      if (isText && el.contentNode) {
+        try {
+          domLines = extractLinesFromDom(el.contentNode);
+        } catch (ignored) {}
+      }
+      return {
+        id: el.id,
+        type: el.type,
+        x: el.x,
+        y: el.y,
+        rotation: el.rotation || 0,
+        fontSize: el.fontSize,
+        align: el.align,
+        color: el.color,
+        text: isText ? (el.contentNode ? el.contentNode.innerText : el.text) : undefined,
+        lines: domLines || el.lines,
+        width: domW,
+        height: domH,
+        aspectRatio: el.aspectRatio,
+        dataUrl: el.dataUrl
+      };
+    });
   }
 
   function saveActiveDraft() {
@@ -1501,16 +1696,22 @@
 
         for (const item of (sticker.elements || [])) {
           if (item.type === 'text') {
-            const textNode = document.createElement('div');
-            textNode.className = 'canvas-element text-element';
-            textNode.style.left = `${item.x}px`;
-            textNode.style.top = `${item.y}px`;
-            textNode.style.fontSize = `${item.fontSize || 24}px`;
-            textNode.style.color = item.color || (sticker.isBlackBg ? '#ffffff' : '#000000');
-            textNode.style.transform = `rotate(${item.rotation || 0}deg)`;
-            textNode.style.textAlign = item.align || 'center';
-            textNode.innerText = item.text || '';
-            previewLayer.appendChild(textNode);
+            const textWrap = document.createElement('div');
+            textWrap.className = 'canvas-element';
+            textWrap.style.left = `${item.x}px`;
+            textWrap.style.top = `${item.y}px`;
+            if (item.width) textWrap.style.width = `${item.width}px`;
+            textWrap.style.transform = `rotate(${item.rotation || 0}deg)`;
+
+            const textContent = document.createElement('div');
+            textContent.className = 'canvas-text-content';
+            textContent.style.fontSize = `${item.fontSize || 24}px`;
+            textContent.style.color = item.color || (sticker.isBlackBg ? '#ffffff' : '#000000');
+            textContent.style.textAlign = item.align || 'center';
+            textContent.innerText = item.text || '';
+
+            textWrap.appendChild(textContent);
+            previewLayer.appendChild(textWrap);
           } else if (item.type === 'image' && item.dataUrl) {
             const imgNode = document.createElement('img');
             imgNode.className = 'canvas-element image-element';
@@ -1629,36 +1830,44 @@
           img.src = el.dataUrl;
         });
       } else if (el.type === 'text') {
-        const text = el.contentNode.innerText;
-        const lines = text.split('\n');
-        const fontSize = el.fontSize * scaleX;
+        const fontSize = (el.fontSize || 24) * scaleX;
+        ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+
+        const maxAvailableScreenW = Math.max(60, CANVAS_WIDTH - el.x - 12);
+        const screenBoxW = el.width || (el.domNode ? el.domNode.offsetWidth : maxAvailableScreenW);
+        const thumbStartX = Math.max(0, el.x * scaleX);
+        const thumbBoxW = Math.max(20, Math.min(screenBoxW * scaleX, 100 - thumbStartX - (2 * scaleX)));
+        const textMaxWidth = Math.max(15, thumbBoxW - (4 * scaleX));
+
+        const lines = getWrappedTextLines(ctx, el, textMaxWidth);
         const lineHeight = fontSize * 1.25;
         const totalHeight = lines.length * lineHeight;
+        const thumbBoxH = el.domNode ? (el.domNode.offsetHeight * scaleY) : (totalHeight + (4 * scaleY));
 
-        const domW = el.domNode.offsetWidth || 80;
-        const domH = el.domNode.offsetHeight || totalHeight / scaleY;
-        const cx = (el.x + domW / 2) * scaleX;
-        const cy = (el.y + domH / 2) * scaleY;
+        const cx = thumbStartX + (thumbBoxW / 2);
+        const cy = (el.y * scaleY) + (thumbBoxH / 2);
 
         ctx.save();
         ctx.translate(cx, cy);
         if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
 
-        ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.fillStyle = el.color || (isBlackBg ? '#ffffff' : '#000000');
-        const startY = -(totalHeight / 2) + fontSize * 0.85;
+        const startY = -(thumbBoxH / 2) + (2 * scaleY) + (fontSize * 0.88);
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
+          if (!line) continue;
           const y = startY + (i * lineHeight);
+          const tw = ctx.measureText(line).width;
+
           if (el.align === 'center') {
-            const tw = ctx.measureText(line).width;
             ctx.fillText(line, -(tw / 2), y);
           } else if (el.align === 'right') {
-            const tw = ctx.measureText(line).width;
-            ctx.fillText(line, (domW * scaleX / 2) - tw, y);
+            const rightEdge = (thumbBoxW / 2) - (2 * scaleX);
+            ctx.fillText(line, rightEdge - tw, y);
           } else {
-            ctx.fillText(line, -(domW * scaleX / 2), y);
+            const leftEdge = -(thumbBoxW / 2) + (2 * scaleX);
+            ctx.fillText(line, leftEdge, y);
           }
         }
         ctx.restore();
@@ -1678,21 +1887,33 @@
       .filter(t => t.length > 0)
       .join(' | ') || (elements.some(e => e.type === 'image') ? 'Image Composition' : 'Untitled Label');
 
-    const serializedElements = elements.map(el => ({
-      id: el.id,
-      type: el.type,
-      x: el.x,
-      y: el.y,
-      rotation: el.rotation || 0,
-      fontSize: el.fontSize,
-      align: el.align,
-      color: el.color,
-      text: el.type === 'text' ? el.contentNode.innerText : undefined,
-      width: el.width,
-      height: el.height,
-      aspectRatio: el.aspectRatio,
-      dataUrl: el.dataUrl
-    }));
+    const serializedElements = elements.map(el => {
+      const isText = el.type === 'text';
+      const domW = el.domNode ? el.domNode.offsetWidth : el.width;
+      const domH = el.domNode ? el.domNode.offsetHeight : el.height;
+      let domLines = undefined;
+      if (isText && el.contentNode) {
+        try {
+          domLines = extractLinesFromDom(el.contentNode);
+        } catch (ignored) {}
+      }
+      return {
+        id: el.id,
+        type: el.type,
+        x: el.x,
+        y: el.y,
+        rotation: el.rotation || 0,
+        fontSize: el.fontSize,
+        align: el.align,
+        color: el.color,
+        text: isText ? (el.contentNode ? el.contentNode.innerText : el.text) : undefined,
+        lines: domLines || el.lines,
+        width: domW,
+        height: domH,
+        aspectRatio: el.aspectRatio,
+        dataUrl: el.dataUrl
+      };
+    });
 
     const snapshotId = 'snap_' + Date.now();
     const snapshot = {
@@ -2322,23 +2543,23 @@
   }
 
   function drawSerializedTextToCanvas(ctx, el, scaleX, scaleY, isStickerBlackBg) {
-    const text = el.text || '';
-    const lines = text.split('\n');
     const fontSize = (el.fontSize || 24) * scaleX;
+    ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+
+    const maxAvailableScreenW = Math.max(60, CANVAS_WIDTH - el.x - 12);
+    const screenBoxW = el.width || (el.domNode ? el.domNode.offsetWidth : maxAvailableScreenW);
+    const printStartX = Math.max(0, el.x * scaleX);
+    const printBoxW = Math.max(60 * scaleX, Math.min(screenBoxW * scaleX, PRINT_WIDTH - printStartX - (12 * scaleX)));
+    const textMaxWidth = Math.max(40 * scaleX, printBoxW - (12 * scaleX));
+
+    const lines = getWrappedTextLines(ctx, el, textMaxWidth);
+
     const lineHeight = fontSize * 1.25;
     const totalHeight = lines.length * lineHeight;
+    const printBoxH = el.height ? Math.max(el.height * scaleY, totalHeight + (12 * scaleY)) : (totalHeight + (12 * scaleY));
 
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    let maxLineWidth = 0;
-    for (const line of lines) {
-      const tw = ctx.measureText(line).width;
-      if (tw > maxLineWidth) maxLineWidth = tw;
-    }
-
-    const domW = el.width ? (el.width * scaleX) : (maxLineWidth + 12 * scaleX);
-    const domH = el.height ? (el.height * scaleY) : (totalHeight + 8 * scaleY);
-    const cx = (el.x * scaleX) + (domW / 2);
-    const cy = (el.y * scaleY) + (domH / 2);
+    const cx = printStartX + (printBoxW / 2);
+    const cy = (el.y * scaleY) + (printBoxH / 2);
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -2347,20 +2568,22 @@
     }
 
     ctx.fillStyle = el.color || (isStickerBlackBg ? '#ffffff' : '#000000');
-    const startY = -(totalHeight / 2) + fontSize * 0.85;
+    const startY = -(printBoxH / 2) + (6 * scaleY) + (fontSize * 0.88);
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      if (!line) continue;
       const y = startY + (i * lineHeight);
+      const tw = ctx.measureText(line).width;
 
       if (el.align === 'center') {
-        const tw = ctx.measureText(line).width;
         ctx.fillText(line, -(tw / 2), y);
       } else if (el.align === 'right') {
-        const tw = ctx.measureText(line).width;
-        ctx.fillText(line, (domW / 2) - tw - 6 * scaleX, y);
+        const rightEdge = (printBoxW / 2) - (6 * scaleX);
+        ctx.fillText(line, rightEdge - tw, y);
       } else {
-        ctx.fillText(line, -(domW / 2) + 6 * scaleX, y);
+        const leftEdge = -(printBoxW / 2) + (6 * scaleX);
+        ctx.fillText(line, leftEdge, y);
       }
     }
     ctx.restore();
