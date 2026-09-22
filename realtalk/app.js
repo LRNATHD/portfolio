@@ -34,20 +34,52 @@
   let autoSaveTimer = null;
   let activeSnapshotId = null;
 
+  // Bridge Status & Telemetry State
+  let currentBridgeStatus = {
+    phoneOnline: false,
+    lastSeenSeconds: null,
+    batteryLevel: null,
+    isCharging: false,
+    printerConnected: false,
+    printerState: 'DISCONNECTED',
+    deviceAddress: null,
+    lastError: null,
+    lastUpdated: 0
+  };
+  let bridgePollInterval = null;
+  let isControlPanelOpen = false;
+
   // DOM Elements
   const stage = document.getElementById('stage');
   const elementsContainer = document.getElementById('elementsContainer');
   const btnAddText = document.getElementById('btnAddText');
   const imageInput = document.getElementById('imageInput');
   const btnPasteImage = document.getElementById('btnPasteImage');
-  const btnDitherMode = document.getElementById('btnDitherMode');
-  const ditherModeText = document.getElementById('ditherModeText');
   const btnBgColor = document.getElementById('btnBgColor');
-  const bgIcon = document.getElementById('bgIcon');
   const bgColorText = document.getElementById('bgColorText');
   const btnClear = document.getElementById('btnClear');
   const btnPrint = document.getElementById('btnPrint');
-  const btnNewCanvas = document.getElementById('btnNewCanvas');
+
+  // Header & Bridge Status DOM
+  const btnBridgeStatus = document.getElementById('btnBridgeStatus');
+  const bridgeStatusText = document.getElementById('bridgeStatusText');
+  const btnOpenControlPanel = document.getElementById('btnOpenControlPanel');
+
+  // Control Panel Modal DOM
+  const controlPanelModal = document.getElementById('controlPanelModal');
+  const btnControlPanelClose = document.getElementById('btnControlPanelClose');
+  const panelPhoneBadge = document.getElementById('panelPhoneBadge');
+  const panelPhoneLastSeen = document.getElementById('panelPhoneLastSeen');
+  const panelPhoneBattery = document.getElementById('panelPhoneBattery');
+  const panelPrinterBadge = document.getElementById('panelPrinterBadge');
+  const panelPrinterState = document.getElementById('panelPrinterState');
+  const panelPrinterAddress = document.getElementById('panelPrinterAddress');
+  const btnRemoteReconnect = document.getElementById('btnRemoteReconnect');
+  const btnRemoteDisconnect = document.getElementById('btnRemoteDisconnect');
+  const btnRemotePrintTest = document.getElementById('btnRemotePrintTest');
+  const btnRefreshBridgeStatus = document.getElementById('btnRefreshBridgeStatus');
+  const panelLogBox = document.getElementById('panelLogBox');
+  const panelLogTime = document.getElementById('panelLogTime');
 
   // History Sidebar DOM
   const historySidebar = document.getElementById('historySidebar');
@@ -63,7 +95,7 @@
   const btnSizeDown = document.getElementById('btnSizeDown');
   const btnSizeUp = document.getElementById('btnSizeUp');
   const btnTextColor = document.getElementById('btnTextColor');
-  const textColorIcon = document.getElementById('textColorIcon');
+  const textColorLabel = document.getElementById('textColorLabel');
   const btnInvertImage = document.getElementById('btnInvertImage');
   const btnRotateCCW = document.getElementById('btnRotateCCW');
   const btnRotateCW = document.getElementById('btnRotateCW');
@@ -74,13 +106,19 @@
   const btnAlignRight = document.getElementById('btnAlignRight');
   const btnDeleteElem = document.getElementById('btnDeleteElem');
 
-  // Modal
+  // Print Status Modal DOM
   const statusModal = document.getElementById('statusModal');
+  const modalSpinner = document.getElementById('modalSpinner');
   const modalTitle = document.getElementById('modalTitle');
   const modalDesc = document.getElementById('modalDesc');
   const modalProgressBar = document.getElementById('modalProgressBar');
   const modalJobId = document.getElementById('modalJobId');
   const modalCloseBtn = document.getElementById('modalCloseBtn');
+  const modalAlertBox = document.getElementById('modalAlertBox');
+  const modalAlertTitle = document.getElementById('modalAlertTitle');
+  const modalAlertDesc = document.getElementById('modalAlertDesc');
+  const btnModalReconnect = document.getElementById('btnModalReconnect');
+  const btnModalPrintAnyway = document.getElementById('btnModalPrintAnyway');
   const lblDate = document.getElementById('lblDate');
 
   // --------------------------------------------------------------------------
@@ -96,6 +134,7 @@
     setupKeyboardListener();
     loadHistoryFromStorage();
     restoreActiveDraft();
+    initBridgeMonitoring();
   }
 
   // --------------------------------------------------------------------------
@@ -208,20 +247,6 @@
       });
     }
 
-    // Dither mode toggle (Photo Floyd-Steinberg vs High-contrast)
-    if (btnDitherMode) {
-      btnDitherMode.addEventListener('click', () => {
-        isPhotoDither = !isPhotoDither;
-        if (isPhotoDither) {
-          btnDitherMode.classList.add('active');
-          if (ditherModeText) ditherModeText.textContent = 'Dither: Photo';
-        } else {
-          btnDitherMode.classList.remove('active');
-          if (ditherModeText) ditherModeText.textContent = 'Dither: Sharp';
-        }
-      });
-    }
-
     // Clear canvas
     if (btnClear) {
       btnClear.addEventListener('click', () => {
@@ -243,6 +268,80 @@
     if (btnBgColor) {
       btnBgColor.addEventListener('click', () => {
         toggleStageBgColor();
+      });
+    }
+
+    // Header & Control Panel listeners
+    if (btnBridgeStatus) {
+      btnBridgeStatus.addEventListener('click', () => openControlPanel());
+    }
+    if (btnOpenControlPanel) {
+      btnOpenControlPanel.addEventListener('click', () => openControlPanel());
+    }
+    if (btnControlPanelClose) {
+      btnControlPanelClose.addEventListener('click', () => closeControlPanel());
+    }
+    if (controlPanelModal) {
+      controlPanelModal.addEventListener('click', (e) => {
+        if (e.target === controlPanelModal) closeControlPanel();
+      });
+    }
+
+    // Remote actions in Control Panel
+    if (btnRemoteReconnect) {
+      btnRemoteReconnect.addEventListener('click', () => {
+        sendBridgeCommand('reconnect_printer');
+      });
+    }
+    if (btnRemoteDisconnect) {
+      btnRemoteDisconnect.addEventListener('click', () => {
+        sendBridgeCommand('disconnect_printer');
+      });
+    }
+    if (btnRemotePrintTest) {
+      btnRemotePrintTest.addEventListener('click', () => {
+        sendBridgeCommand('print_test');
+      });
+    }
+    if (btnRefreshBridgeStatus) {
+      btnRefreshBridgeStatus.addEventListener('click', () => {
+        fetchBridgeStatus();
+      });
+    }
+
+    // Print Modal Alert buttons
+    if (btnModalReconnect) {
+      btnModalReconnect.addEventListener('click', async () => {
+        btnModalReconnect.disabled = true;
+        btnModalReconnect.textContent = 'Connecting...';
+        if (modalAlertTitle) modalAlertTitle.textContent = 'Connecting to Printer...';
+        if (modalAlertDesc) modalAlertDesc.textContent = 'Signal dispatched to phone. Establishing Bluetooth handshake...';
+
+        await sendBridgeCommand('reconnect_printer');
+
+        let attempts = 0;
+        const connectCheckTimer = setInterval(async () => {
+          attempts++;
+          await fetchBridgeStatus();
+          if (currentBridgeStatus.printerConnected) {
+            clearInterval(connectCheckTimer);
+            btnModalReconnect.disabled = false;
+            btnModalReconnect.textContent = 'Reconnect Printer';
+            executePrintJob();
+          } else if (attempts >= 14) {
+            clearInterval(connectCheckTimer);
+            btnModalReconnect.disabled = false;
+            btnModalReconnect.textContent = 'Retry Reconnect';
+            if (modalAlertTitle) modalAlertTitle.textContent = 'Connection Timeout';
+            if (modalAlertDesc) modalAlertDesc.textContent = 'Printer did not connect within 20s. Ensure printer power is ON, or Queue Anyway.';
+          }
+        }, 1500);
+      });
+    }
+
+    if (btnModalPrintAnyway) {
+      btnModalPrintAnyway.addEventListener('click', () => {
+        executePrintJob();
       });
     }
 
@@ -968,13 +1067,8 @@
   }
 
   function updateTextColorIcon(color) {
-    if (!textColorIcon) return;
-    if (color === '#ffffff') {
-      textColorIcon.innerHTML = '&#9898;';
-      if (btnTextColor) btnTextColor.title = 'Text: White (click for Black)';
-    } else {
-      textColorIcon.innerHTML = '&#9899;';
-      if (btnTextColor) btnTextColor.title = 'Text: Black (click for White)';
+    if (textColorLabel) {
+      textColorLabel.textContent = color === '#ffffff' ? 'Text: White' : 'Text: Black';
     }
   }
 
@@ -1021,12 +1115,10 @@
     if (isBlackBg) {
       if (stage) stage.classList.add('black-bg');
       if (btnBgColor) btnBgColor.classList.add('active');
-      if (bgIcon) bgIcon.innerHTML = '&#9632;';
       if (bgColorText) bgColorText.textContent = 'Bg: Black';
     } else {
       if (stage) stage.classList.remove('black-bg');
       if (btnBgColor) btnBgColor.classList.remove('active');
-      if (bgIcon) bgIcon.innerHTML = '&#9723;';
       if (bgColorText) bgColorText.textContent = 'Bg: White';
     }
   }
@@ -1306,8 +1398,7 @@
     if (historyListItems.length === 0) {
       container.innerHTML = `
         <div class="history-empty">
-          <span style="font-size: 20px;">&#127991;</span><br/>
-          <strong style="display:block; margin: 4px 0;">No saved labels yet</strong>
+          <strong style="display:block; margin: 4px 0; color: var(--text-primary);">No saved labels</strong>
           <span>Labels you print or design will be saved here automatically.</span>
         </div>
       `;
@@ -1391,9 +1482,208 @@
   }
 
   // --------------------------------------------------------------------------
+  // Bridge Telemetry & Hardware Control Panel
+  // --------------------------------------------------------------------------
+  function initBridgeMonitoring() {
+    fetchBridgeStatus();
+    startBridgePolling(12000);
+  }
+
+  function startBridgePolling(ms) {
+    if (bridgePollInterval) clearInterval(bridgePollInterval);
+    bridgePollInterval = setInterval(fetchBridgeStatus, ms);
+  }
+
+  async function fetchBridgeStatus() {
+    try {
+      const res = await fetch(`${WORKER_BASE_URL}/api/bridge/status?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        currentBridgeStatus = {
+          phoneOnline: !!data.phoneOnline,
+          lastSeenSeconds: data.lastSeenSeconds,
+          batteryLevel: data.batteryLevel,
+          isCharging: !!data.isCharging,
+          printerConnected: !!data.printerConnected,
+          printerState: data.printerState || (data.printerConnected ? 'CONNECTED' : 'DISCONNECTED'),
+          deviceAddress: data.deviceAddress,
+          lastError: data.lastError,
+          lastUpdated: Date.now()
+        };
+        updateBridgeUI();
+      }
+    } catch (err) {
+      console.warn('Bridge status poll failed:', err);
+    }
+  }
+
+  function updateBridgeUI() {
+    // 1. Header status pill
+    if (btnBridgeStatus && bridgeStatusText) {
+      btnBridgeStatus.classList.remove('status-connected', 'status-warning', 'status-offline', 'status-checking');
+      if (currentBridgeStatus.printerConnected) {
+        btnBridgeStatus.classList.add('status-connected');
+        bridgeStatusText.textContent = 'Printer: Connected';
+        btnBridgeStatus.title = 'NULLTONEX connected via Bluetooth. Click for Control Panel.';
+      } else if (currentBridgeStatus.phoneOnline) {
+        btnBridgeStatus.classList.add('status-warning');
+        bridgeStatusText.textContent = 'Printer: Disconnected';
+        btnBridgeStatus.title = 'Phone bridge online, printer disconnected. Click to reconnect.';
+      } else {
+        btnBridgeStatus.classList.add('status-offline');
+        bridgeStatusText.textContent = 'Bridge: Offline';
+        btnBridgeStatus.title = 'Phone bridge is offline. Click for diagnostics.';
+      }
+    }
+
+    // 2. Control panel diagnostics (if visible)
+    if (isControlPanelOpen) {
+      if (panelPhoneBadge) {
+        panelPhoneBadge.className = `tile-status-badge ${currentBridgeStatus.phoneOnline ? 'badge-online' : 'badge-offline'}`;
+        panelPhoneBadge.textContent = currentBridgeStatus.phoneOnline ? 'Online' : 'Offline';
+      }
+      if (panelPhoneLastSeen) {
+        if (currentBridgeStatus.lastSeenSeconds === null || currentBridgeStatus.lastSeenSeconds === undefined) {
+          panelPhoneLastSeen.textContent = 'Never';
+        } else if (currentBridgeStatus.lastSeenSeconds < 10) {
+          panelPhoneLastSeen.textContent = `Just now (${currentBridgeStatus.lastSeenSeconds}s)`;
+        } else if (currentBridgeStatus.lastSeenSeconds < 60) {
+          panelPhoneLastSeen.textContent = `${currentBridgeStatus.lastSeenSeconds}s ago`;
+        } else {
+          panelPhoneLastSeen.textContent = `${Math.round(currentBridgeStatus.lastSeenSeconds / 60)}m ago`;
+        }
+      }
+      if (panelPhoneBattery) {
+        if (currentBridgeStatus.batteryLevel !== null && currentBridgeStatus.batteryLevel !== undefined) {
+          panelPhoneBattery.textContent = `${currentBridgeStatus.batteryLevel}%${currentBridgeStatus.isCharging ? ' (Charging)' : ''}`;
+        } else {
+          panelPhoneBattery.textContent = '--';
+        }
+      }
+
+      if (panelPrinterBadge) {
+        if (currentBridgeStatus.printerConnected) {
+          panelPrinterBadge.className = 'tile-status-badge badge-connected';
+          panelPrinterBadge.textContent = 'Connected';
+        } else if (currentBridgeStatus.printerState === 'CONNECTING') {
+          panelPrinterBadge.className = 'tile-status-badge badge-warning';
+          panelPrinterBadge.textContent = 'Connecting';
+        } else {
+          panelPrinterBadge.className = 'tile-status-badge badge-disconnected';
+          panelPrinterBadge.textContent = 'Disconnected';
+        }
+      }
+      if (panelPrinterState) {
+        panelPrinterState.textContent = currentBridgeStatus.printerState || '--';
+      }
+      if (panelPrinterAddress) {
+        panelPrinterAddress.textContent = currentBridgeStatus.deviceAddress || '66:32:89:D2:0A:46';
+      }
+      if (panelLogTime) {
+        panelLogTime.textContent = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+    }
+  }
+
+  function openControlPanel() {
+    isControlPanelOpen = true;
+    if (controlPanelModal) controlPanelModal.classList.remove('hidden');
+    fetchBridgeStatus();
+    startBridgePolling(3000);
+  }
+
+  function closeControlPanel() {
+    isControlPanelOpen = false;
+    if (controlPanelModal) controlPanelModal.classList.add('hidden');
+    startBridgePolling(12000);
+  }
+
+  async function sendBridgeCommand(action, params = {}) {
+    appendPanelLog(`Dispatching command: ${action}...`, 'info');
+    try {
+      const res = await fetch(`${WORKER_BASE_URL}/api/bridge/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, params })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        appendPanelLog(`Sent '${action}' [ID: ${data.commandId?.slice(0, 8) || 'ok'}]`, 'success');
+        setTimeout(fetchBridgeStatus, 1500);
+        setTimeout(fetchBridgeStatus, 4000);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        appendPanelLog(`Error sending '${action}': ${err.error || res.statusText}`, 'error');
+      }
+    } catch (err) {
+      appendPanelLog(`Network error: ${err.message}`, 'error');
+    }
+  }
+
+  function appendPanelLog(text, type = 'info') {
+    if (!panelLogBox) return;
+    const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const row = document.createElement('div');
+    row.className = `log-entry ${type}`;
+    row.textContent = `[${time}] ${text}`;
+    panelLogBox.appendChild(row);
+    panelLogBox.scrollTop = panelLogBox.scrollHeight;
+  }
+
+  // --------------------------------------------------------------------------
+  // Pipeline Progress Tracking
+  // --------------------------------------------------------------------------
+  function updatePipeline(stage) {
+    const steps = ['Render', 'Queue', 'Bridge', 'Print'];
+    const stepEls = {
+      Render: document.getElementById('stepRender'),
+      Queue: document.getElementById('stepQueue'),
+      Bridge: document.getElementById('stepBridge'),
+      Print: document.getElementById('stepPrint')
+    };
+    const lines = {
+      Render: document.getElementById('lineRenderQueue'),
+      Queue: document.getElementById('lineQueueBridge'),
+      Bridge: document.getElementById('lineBridgePrint')
+    };
+
+    const curIndex = steps.indexOf(stage);
+
+    steps.forEach((name, idx) => {
+      const el = stepEls[name];
+      if (!el) return;
+      el.classList.remove('active', 'done');
+      if (idx < curIndex) {
+        el.classList.add('done');
+      } else if (idx === curIndex) {
+        el.classList.add('active');
+      }
+    });
+
+    if (lines.Render) lines.Render.classList.toggle('done', curIndex > 0);
+    if (lines.Queue) lines.Queue.classList.toggle('done', curIndex > 1);
+    if (lines.Bridge) lines.Bridge.classList.toggle('done', curIndex > 2);
+  }
+
+  function showModalAlert(title, desc, showReconnect = true) {
+    if (!modalAlertBox) return;
+    modalAlertBox.classList.remove('hidden');
+    if (modalAlertTitle) modalAlertTitle.textContent = title;
+    if (modalAlertDesc) modalAlertDesc.textContent = desc;
+    if (btnModalReconnect) btnModalReconnect.style.display = showReconnect ? 'inline-block' : 'none';
+    if (modalCloseBtn) modalCloseBtn.classList.remove('hidden');
+    if (modalSpinner) modalSpinner.style.display = 'none';
+  }
+
+  function hideModalAlert() {
+    if (modalAlertBox) modalAlertBox.classList.add('hidden');
+    if (modalSpinner) modalSpinner.style.display = 'block';
+  }
+
+  // --------------------------------------------------------------------------
   // Composite & Submission to Cloudflare & Thermal Printer
   // --------------------------------------------------------------------------
-  async function handlePrintSubmission() {
+  async function handlePrintSubmission(bypassBridgeCheck = false) {
     if (isSubmitting) return;
     deselectAll();
 
@@ -1402,13 +1692,47 @@
       return;
     }
 
-    isSubmitting = true;
-    btnPrint.disabled = true;
-
     // Auto-save snapshot into history on physical print
     saveSnapshotToHistory('Printed Label');
 
-    showModal('Rendering 4x6 Label...', 'Compositing ultra-detail thermal raster dots (800x1200)...', 25);
+    // 1. Check bridge status before dispatching to hardware
+    if (!bypassBridgeCheck) {
+      if (Date.now() - currentBridgeStatus.lastUpdated > 6000) {
+        await fetchBridgeStatus();
+      }
+
+      // Case A: Phone is completely offline
+      if (!currentBridgeStatus.phoneOnline) {
+        showModal('Phone Bridge Offline', 'The phone is not connected to the cloud server.', 15, 'Queue');
+        showModalAlert(
+          'Phone Bridge Offline',
+          'The Android phone is not reporting heartbeats. Please ensure the RealTalk app is open and running on the phone.',
+          false
+        );
+        return;
+      }
+
+      // Case B: Phone is online, but Bluetooth printer is disconnected
+      if (!currentBridgeStatus.printerConnected) {
+        showModal('Printer Disconnected', 'Phone is online, but NULLTONEX is disconnected.', 15, 'Bridge');
+        showModalAlert(
+          'Printer Disconnected',
+          'Phone is online, but Bluetooth connection to NULLTONEX is disconnected. Reconnect now to print directly.',
+          true
+        );
+        return;
+      }
+    }
+
+    executePrintJob();
+  }
+
+  async function executePrintJob() {
+    hideModalAlert();
+    isSubmitting = true;
+    btnPrint.disabled = true;
+
+    showModal('Rendering 4x6 Label...', 'Compositing monochrome raster dots (800x1200)...', 25, 'Render');
 
     try {
       // 1. Render full 800x1200 high-res canvas
@@ -1417,11 +1741,10 @@
       printCanvas.height = PRINT_HEIGHT;
       const ctx = printCanvas.getContext('2d');
 
-      // Fill solid background (White or Black)
+      // Fill background (White or Black)
       ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
       ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
-      // Scale factor from display to physical printhead (800/400 = 2.0, 1200/600 = 2.0)
       const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
       const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
@@ -1434,21 +1757,20 @@
         }
       }
 
-      // Discreet corner watermark: "made by noahsmith.dev"
+      // Subtle corner watermark
       ctx.fillStyle = isBlackBg ? '#ffffff' : '#000000';
       ctx.font = '16px monospace';
       const watermark = 'made by noahsmith.dev';
       const wmWidth = ctx.measureText(watermark).width;
       ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
 
-      // Final 1-bit threshold pass to guarantee pure monochrome dots
+      // Strict 1-bit threshold pass to guarantee pure monochrome dots
       enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT);
 
-      // Export compressed monochrome PNG
       const pngDataUrl = printCanvas.toDataURL('image/png');
 
       // 2. Submit to Cloudflare Worker Queue
-      updateModal('Sending to Bridge...', 'Transmitting payload through Cloudflare Queue to Android phone...', 50);
+      updateModal('Queueing Print...', 'Transmitting payload to Cloudflare Queue...', 50, false, 'Queue');
 
       const textSummary = elements
         .filter(e => e.type === 'text')
@@ -1473,10 +1795,10 @@
       }
 
       const result = await response.json();
-      modalJobId.textContent = `Job ID: ${result.id}`;
+      modalJobId.textContent = `Job ID: ${result.id.slice(0, 8)}`;
 
       // 3. Poll for physical print confirmation
-      updateModal('Printing on Noah\'s Desk...', 'Android bridge received job & is transmitting to NULLTONEX...', 75);
+      updateModal('Transmitting to Phone...', 'Phone bridge received job & is transmitting to NULLTONEX...', 75, false, 'Bridge');
       pollPrintStatus(result.id);
 
     } catch (err) {
@@ -1571,17 +1893,17 @@
 
   function pollPrintStatus(quoteId) {
     let checks = 0;
-    const maxChecks = 30;
+    const maxChecks = 35;
 
     const interval = setInterval(async () => {
       checks++;
       try {
-        const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${quoteId}`);
+        const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${quoteId}&t=${Date.now()}`);
         if (res.ok) {
           const data = await res.json();
           if (data.status === 'printed') {
             clearInterval(interval);
-            updateModal('Printed Successfully! &#127881;', 'Your label has physically burned onto the 4x6 roll on Noah\'s desk!', 100, true);
+            updateModal('Print Complete', 'Your label has physically burned onto 4x6 thermal paper on Noah\'s desk.', 100, true, 'Print');
             isSubmitting = false;
             btnPrint.disabled = false;
             return;
@@ -1591,29 +1913,35 @@
 
       if (checks >= maxChecks) {
         clearInterval(interval);
-        updateModal('Queued for Print', 'Your label is in the queue and will print as soon as the bridge checks in.', 100, true);
+        updateModal('Queued for Print', 'Your label is in the queue and will print as soon as the bridge checks in.', 100, true, 'Bridge');
         isSubmitting = false;
         btnPrint.disabled = false;
       }
     }, 2000);
   }
 
-  function showModal(title, desc, progress) {
+  function showModal(title, desc, progress, stage = 'Render') {
     if (!statusModal) return;
     statusModal.classList.remove('hidden');
     if (modalCloseBtn) modalCloseBtn.classList.add('hidden');
+    if (modalSpinner) modalSpinner.style.display = 'block';
     if (modalTitle) modalTitle.textContent = title;
     if (modalDesc) modalDesc.textContent = desc;
     if (modalProgressBar) modalProgressBar.style.width = `${progress}%`;
+    const alertBox = document.getElementById('modalAlertBox');
+    if (alertBox) alertBox.classList.add('hidden');
+    updatePipeline(stage);
   }
 
-  function updateModal(title, desc, progress, showClose = false) {
+  function updateModal(title, desc, progress, showClose = false, stage = null) {
     if (!statusModal) return;
     if (modalTitle) modalTitle.textContent = title;
     if (modalDesc) modalDesc.textContent = desc;
     if (modalProgressBar) modalProgressBar.style.width = `${progress}%`;
-    if (showClose && modalCloseBtn) {
-      modalCloseBtn.classList.remove('hidden');
+    if (stage) updatePipeline(stage);
+    if (showClose) {
+      if (modalCloseBtn) modalCloseBtn.classList.remove('hidden');
+      if (modalSpinner) modalSpinner.style.display = 'none';
     }
   }
 
