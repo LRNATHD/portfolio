@@ -53,12 +53,14 @@
   const stage = document.getElementById('stage');
   const elementsContainer = document.getElementById('elementsContainer');
   const btnAddText = document.getElementById('btnAddText');
+  const btnUploadImage = document.getElementById('btnUploadImage');
   const imageInput = document.getElementById('imageInput');
   const btnPasteImage = document.getElementById('btnPasteImage');
   const btnBgColor = document.getElementById('btnBgColor');
   const bgColorText = document.getElementById('bgColorText');
   const btnClear = document.getElementById('btnClear');
   const btnPrint = document.getElementById('btnPrint');
+  const btnNewCanvas = document.getElementById('btnNewCanvas');
 
   // Header & Bridge Status DOM
   const btnBridgeStatus = document.getElementById('btnBridgeStatus');
@@ -131,6 +133,7 @@
 
     setupEventListeners();
     setupClipboardListener();
+    setupDragAndDropListeners();
     setupKeyboardListener();
     loadHistoryFromStorage();
     restoreActiveDraft();
@@ -215,9 +218,16 @@
     }
 
     // Upload Image
+    if (btnUploadImage && imageInput) {
+      btnUploadImage.addEventListener('click', (e) => {
+        e.preventDefault();
+        imageInput.click();
+      });
+    }
+
     if (imageInput) {
       imageInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files && e.target.files[0];
         if (file) {
           processUploadedFile(file);
         }
@@ -240,9 +250,10 @@
               }
             }
           }
-          alert("To paste an image: Press Cmd+V / Ctrl+V, or tap 'Add Image' to pick from gallery!");
+          alert("To paste an image: Press Ctrl+V (or Cmd+V on Mac) anywhere on this page!");
         } catch (err) {
-          alert("To paste an image: Press Cmd+V / Ctrl+V, or tap 'Add Image' to choose a photo!");
+          console.warn("Clipboard read error:", err);
+          alert("To paste an image: Press Ctrl+V (or Cmd+V on Mac) anywhere on this page!");
         }
       });
     }
@@ -400,12 +411,46 @@
   // Global Clipboard Listener (Cmd+V / Ctrl+V anywhere on window)
   function setupClipboardListener() {
     window.addEventListener('paste', (e) => {
-      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-      for (const item of items) {
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
+      const clipboardData = e.clipboardData || (window.event && window.event.clipboardData);
+      if (!clipboardData) return;
+
+      // 1. Check items (blobs from screenshots or clipboard image data)
+      if (clipboardData.items) {
+        for (const item of clipboardData.items) {
+          if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              processUploadedFile(file);
+              return;
+            }
+          }
+        }
+      }
+
+      // 2. Check files directly
+      if (clipboardData.files && clipboardData.files.length > 0) {
+        for (const file of clipboardData.files) {
+          if (file.type.startsWith('image/')) {
             e.preventDefault();
+            processUploadedFile(file);
+            return;
+          }
+        }
+      }
+    });
+  }
+
+  // Global Drag and Drop Listener (drag image file onto window or canvas)
+  function setupDragAndDropListeners() {
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        for (const file of e.dataTransfer.files) {
+          if (file.type.startsWith('image/')) {
             processUploadedFile(file);
             return;
           }
