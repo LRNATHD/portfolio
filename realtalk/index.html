@@ -199,6 +199,36 @@
             </div>
           </div>
 
+          <!-- Printhead Hardware Settings Section -->
+          <div class="panel-settings-section">
+            <div class="section-title">Printhead Hardware Settings</div>
+            <div class="settings-grid">
+              <div class="setting-item">
+                <label for="selectPrintSpeed" class="setting-label">Print Speed</label>
+                <select id="selectPrintSpeed" class="setting-select">
+                  <option value="1.5" selected>1.5 ips (Slow / Deep Thermal - Recommended)</option>
+                  <option value="2.0">2.0 ips (Standard)</option>
+                  <option value="3.0">3.0 ips (Fast)</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label for="selectPrintDensity" class="setting-label">Darkness Density</label>
+                <select id="selectPrintDensity" class="setting-select">
+                  <option value="10">10 (Medium)</option>
+                  <option value="12" selected>12 (High Contrast - Recommended)</option>
+                  <option value="14">14 (Ultra Dark)</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label for="selectPrintPolarity" class="setting-label">Color Polarity</label>
+                <select id="selectPrintPolarity" class="setting-select">
+                  <option value="standard" selected>Standard (White Paper, Black Ink)</option>
+                  <option value="inverted">Inverted (Negative / Black Paper Burn)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <!-- Activity Log -->
           <div class="panel-log-section">
             <div class="log-header">

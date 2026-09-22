@@ -83,6 +83,11 @@
   const panelLogBox = document.getElementById('panelLogBox');
   const panelLogTime = document.getElementById('panelLogTime');
 
+  // Printhead Hardware Settings DOM
+  const selectPrintSpeed = document.getElementById('selectPrintSpeed');
+  const selectPrintDensity = document.getElementById('selectPrintDensity');
+  const selectPrintPolarity = document.getElementById('selectPrintPolarity');
+
   // History Sidebar DOM
   const historySidebar = document.getElementById('historySidebar');
   const historyContainer = document.getElementById('historyContainer');
@@ -137,7 +142,35 @@
     setupKeyboardListener();
     loadHistoryFromStorage();
     restoreActiveDraft();
+    restoreHardwareSettings();
     initBridgeMonitoring();
+  }
+
+  function restoreHardwareSettings() {
+    const savedSpeed = localStorage.getItem('realtalk_print_speed');
+    if (savedSpeed && selectPrintSpeed) selectPrintSpeed.value = savedSpeed;
+
+    const savedDensity = localStorage.getItem('realtalk_print_density');
+    if (savedDensity && selectPrintDensity) selectPrintDensity.value = savedDensity;
+
+    const savedPolarity = localStorage.getItem('realtalk_print_polarity');
+    if (savedPolarity && selectPrintPolarity) selectPrintPolarity.value = savedPolarity;
+
+    if (selectPrintSpeed) {
+      selectPrintSpeed.addEventListener('change', () => {
+        localStorage.setItem('realtalk_print_speed', selectPrintSpeed.value);
+      });
+    }
+    if (selectPrintDensity) {
+      selectPrintDensity.addEventListener('change', () => {
+        localStorage.setItem('realtalk_print_density', selectPrintDensity.value);
+      });
+    }
+    if (selectPrintPolarity) {
+      selectPrintPolarity.addEventListener('change', () => {
+        localStorage.setItem('realtalk_print_polarity', selectPrintPolarity.value);
+      });
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1823,6 +1856,10 @@
         .filter(t => t.length > 0)
         .join(' | ') || 'Canvas Print';
 
+      const speed = parseFloat(selectPrintSpeed?.value || localStorage.getItem('realtalk_print_speed') || '1.5');
+      const density = parseInt(selectPrintDensity?.value || localStorage.getItem('realtalk_print_density') || '12', 10);
+      const invert = (selectPrintPolarity?.value || localStorage.getItem('realtalk_print_polarity') || 'standard') === 'inverted';
+
       const response = await fetch(`${WORKER_BASE_URL}/api/quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1830,7 +1867,10 @@
           type: 'canvas',
           imageData: pngDataUrl,
           text: textSummary,
-          author: 'Canvas'
+          author: 'Canvas',
+          speed,
+          density,
+          invert
         })
       });
 
