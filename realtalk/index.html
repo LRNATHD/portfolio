@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>RealTalk // Thermal Canvas</title>
-  <meta name="description" content="Design and print custom 4x6 labels with precision dithering to Noah's desk thermal printer." />
+  <title>RealTalk // Transmission Terminal</title>
+  <meta name="description" content="Design and manifest physical artifacts, notes, and graphics directly onto Noah's desk in real time." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -16,26 +16,26 @@
     <header class="app-header">
       <div class="header-left">
         <h1 class="app-title">RealTalk</h1>
-        <button id="btnBridgeStatus" class="bridge-status-pill status-checking" type="button" title="Open Hardware Control Panel">
+        <button id="btnBridgeStatus" class="bridge-status-pill status-checking" type="button" title="Desk Terminal Matrix & Telemetry">
           <span class="status-dot"></span>
-          <span id="bridgeStatusText">Bridge: Checking...</span>
+          <span id="bridgeStatusText">Desk Link: Checking...</span>
         </button>
       </div>
       <div class="header-right">
-        <button id="btnOpenControlPanel" class="header-btn" type="button" title="Hardware Control Panel">
+        <button id="btnOpenControlPanel" class="header-btn" type="button" title="Desk Terminal Console">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          <span>Control Panel</span>
+          <span>Console</span>
         </button>
-        <button id="btnToggleHistory" class="header-btn" type="button" title="View past labels">
-          <span>Past Labels</span>
+        <button id="btnToggleHistory" class="header-btn" type="button" title="View past transmissions">
+          <span>Transmissions</span>
           <span id="historyBadge" class="history-count-badge">0</span>
         </button>
-        <button id="btnPrint" class="btn-print" title="Print active sticker to Noah's desk">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          <span class="btn-label" id="btnPrintLabel">Print to Desk</span>
+        <button id="btnPrint" class="btn-print" title="Materialize physically on Noah's desk">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v13m0 0l-4-4m4 4l4-4"></path><rect x="4" y="16" width="16" height="6" rx="2"></rect></svg>
+          <span class="btn-label" id="btnPrintLabel">Transmit to Desk</span>
         </button>
-        <button id="btnPrintAll" class="btn-print-all hidden" title="Batch print all stickers in this project sequentially" type="button">
-          <span>Print All (<span id="lblPrintAllCount">1</span>)</span>
+        <button id="btnPrintAll" class="btn-print-all hidden" title="Transmit all cards in this sequence to Noah's desk" type="button">
+          <span>Transmit All (<span id="lblPrintAllCount">1</span>)</span>
         </button>
       </div>
     </header>
@@ -70,40 +70,40 @@
     <div class="workspace-layout">
       <!-- Canvas Workspace Area -->
       <main class="canvas-workspace">
-        <!-- Multi-Sticker Project Navigation Bar -->
+        <!-- Multi-Card Sequence Navigation Bar -->
         <div class="sticker-strip-bar" id="stickerStripBar">
           <div class="sticker-strip-left">
-            <span class="strip-label">Project:</span>
+            <span class="strip-label">Sequence:</span>
             <div class="sticker-tabs" id="stickerTabs">
               <!-- Dynamically populated: [ 1 ] [ 2 ] [ 3 ] ... -->
             </div>
-            <button id="btnAddSticker" class="btn-strip-action primary" type="button" title="Add a new 4x6 sticker to this project">
-              <span>+ Add Sticker</span>
+            <button id="btnAddSticker" class="btn-strip-action primary" type="button" title="Add a new card to this sequence">
+              <span>+ Add Card</span>
             </button>
           </div>
 
           <div class="sticker-strip-right">
-            <button id="btnDuplicateSticker" class="btn-strip-action" type="button" title="Duplicate current sticker">
+            <button id="btnDuplicateSticker" class="btn-strip-action" type="button" title="Duplicate active card">
               <span>Duplicate</span>
             </button>
-            <button id="btnDeleteSticker" class="btn-strip-action danger" type="button" title="Delete current sticker">
+            <button id="btnDeleteSticker" class="btn-strip-action danger" type="button" title="Delete active card">
               <span>Delete</span>
             </button>
             <div class="strip-separator"></div>
-            <button id="btnToggleRollView" class="btn-strip-action" type="button" title="Toggle between single sticker and continuous roll view">
-              <span id="lblRollViewMode">Roll View</span>
+            <button id="btnToggleRollView" class="btn-strip-action" type="button" title="Toggle continuous stream view">
+              <span id="lblRollViewMode">Stream View</span>
             </button>
           </div>
         </div>
 
         <div class="canvas-container" id="canvasContainer">
-          <!-- 4x6" Interactive Thermal Label Stage -->
+          <!-- Physical Artifact Stage -->
           <div class="thermal-stage" id="stage" data-sticker-idx="0">
             <!-- Active elements container -->
             <div id="elementsContainer" class="elements-layer"></div>
 
             <!-- Bottom subtle corner watermark -->
-            <div class="stage-watermark unselectable">made by noahsmith.dev</div>
+            <div class="stage-watermark unselectable">noahsmith.dev // realtalk terminal</div>
           </div>
         </div>
 
@@ -113,17 +113,17 @@
         </div>
       </main>
 
-      <!-- Past Canvases History Sidebar / Drawer -->
+      <!-- Past Transmissions History Sidebar / Drawer -->
       <aside class="history-sidebar" id="historySidebar">
         <div class="history-sidebar-header">
           <div class="history-title">
-            <span>Past Labels</span>
+            <span>Transmissions</span>
           </div>
           <button id="btnSidebarClose" class="btn-sidebar-close" type="button" title="Close drawer">&times;</button>
         </div>
 
         <button id="btnNewCanvasSidebar" class="btn-new-canvas" type="button">
-          <span>+ New Blank Label</span>
+          <span>+ New Blank Canvas</span>
         </button>
 
         <div class="history-list" id="historyContainer">
@@ -164,7 +164,7 @@
         <div class="panel-header">
           <div class="panel-header-title">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
-            <h3>Hardware Control Panel</h3>
+            <h3>Desk Physical Node Console</h3>
           </div>
           <button id="btnControlPanelClose" class="panel-close-btn" type="button">&times;</button>
         </div>
@@ -172,37 +172,37 @@
         <div class="panel-body">
           <!-- Diagnostics Grid -->
           <div class="panel-grid">
-            <!-- Phone Bridge Card -->
+            <!-- Mobile Uplink Relay Card -->
             <div class="panel-tile">
               <div class="tile-header">
-                <span class="tile-label">Phone Bridge</span>
+                <span class="tile-label">Mobile Uplink Relay</span>
                 <span id="panelPhoneBadge" class="tile-status-badge badge-checking">Checking...</span>
               </div>
               <div class="tile-metrics">
                 <div class="metric-row">
-                  <span class="metric-key">Heartbeat:</span>
+                  <span class="metric-key">Uplink Ping:</span>
                   <span id="panelPhoneLastSeen" class="metric-val">--</span>
                 </div>
                 <div class="metric-row">
-                  <span class="metric-key">Battery:</span>
+                  <span class="metric-key">Relay Power:</span>
                   <span id="panelPhoneBattery" class="metric-val">--</span>
                 </div>
               </div>
             </div>
 
-            <!-- Printer Card -->
+            <!-- Desk Physical Node Card -->
             <div class="panel-tile">
               <div class="tile-header">
-                <span class="tile-label">NULLTONEX Printer</span>
+                <span class="tile-label">Desk Physical Node</span>
                 <span id="panelPrinterBadge" class="tile-status-badge badge-checking">Checking...</span>
               </div>
               <div class="tile-metrics">
                 <div class="metric-row">
-                  <span class="metric-key">BT Status:</span>
+                  <span class="metric-key">Wireless Link:</span>
                   <span id="panelPrinterState" class="metric-val">--</span>
                 </div>
                 <div class="metric-row">
-                  <span class="metric-key">Target MAC:</span>
+                  <span class="metric-key">Node Address:</span>
                   <span id="panelPrinterAddress" class="metric-val">66:32:89:D2:0A:46</span>
                 </div>
               </div>
@@ -211,48 +211,48 @@
 
           <!-- Remote Commands Section -->
           <div class="panel-actions-section">
-            <div class="section-title">Remote Actions</div>
+            <div class="section-title">Terminal Controls</div>
             <div class="panel-action-buttons">
               <button id="btnRemoteReconnect" class="btn-action primary" type="button">
-                <span>Reconnect Printer</span>
+                <span>Reconnect Node</span>
               </button>
               <button id="btnRemoteDisconnect" class="btn-action" type="button">
-                <span>Disconnect</span>
+                <span>Disconnect Node</span>
               </button>
               <button id="btnRemotePrintTest" class="btn-action" type="button">
-                <span>Print Test Label</span>
+                <span>Transmit Calibration Card</span>
               </button>
               <button id="btnRefreshBridgeStatus" class="btn-action secondary" type="button">
-                <span>Refresh Status</span>
+                <span>Sync Telemetry</span>
               </button>
             </div>
           </div>
 
-          <!-- Printhead Hardware Settings Section -->
+          <!-- Physical Engine Settings Section -->
           <div class="panel-settings-section">
-            <div class="section-title">Printhead Hardware Settings</div>
+            <div class="section-title">Physical Engine Calibration</div>
             <div class="settings-grid">
               <div class="setting-item">
-                <label for="selectPrintSpeed" class="setting-label">Print Speed</label>
+                <label for="selectPrintSpeed" class="setting-label">Feed Velocity</label>
                 <select id="selectPrintSpeed" class="setting-select">
-                  <option value="1.5" selected>1.5 ips (Slow / Deep Thermal - Recommended)</option>
-                  <option value="2.0">2.0 ips (Standard)</option>
-                  <option value="3.0">3.0 ips (Fast)</option>
+                  <option value="1.5" selected>1.5 ips (Deep Precision - Recommended)</option>
+                  <option value="2.0">2.0 ips (Standard Velocity)</option>
+                  <option value="3.0">3.0 ips (Rapid Feed)</option>
                 </select>
               </div>
               <div class="setting-item">
-                <label for="selectPrintDensity" class="setting-label">Darkness Density</label>
+                <label for="selectPrintDensity" class="setting-label">Exposure Density</label>
                 <select id="selectPrintDensity" class="setting-select">
-                  <option value="10">10 (Medium)</option>
+                  <option value="10">10 (Subtle Exposure)</option>
                   <option value="12" selected>12 (High Contrast - Recommended)</option>
-                  <option value="14">14 (Ultra Dark)</option>
+                  <option value="14">14 (Deep Saturation)</option>
                 </select>
               </div>
               <div class="setting-item">
-                <label for="selectPrintPolarity" class="setting-label">Color Polarity</label>
+                <label for="selectPrintPolarity" class="setting-label">Surface Polarity</label>
                 <select id="selectPrintPolarity" class="setting-select">
-                  <option value="standard" selected>Standard (White Paper, Black Ink)</option>
-                  <option value="inverted">Inverted (Negative / Black Paper Burn)</option>
+                  <option value="standard" selected>Positive (Substrate White, Ink Black)</option>
+                  <option value="inverted">Negative (Substrate Burn Inversion)</option>
                 </select>
               </div>
             </div>
@@ -261,11 +261,11 @@
           <!-- Activity Log -->
           <div class="panel-log-section">
             <div class="log-header">
-              <span class="section-title">Telemetry &amp; Command Log</span>
+              <span class="section-title">Node Telemetry &amp; Stream</span>
               <span id="panelLogTime" class="log-time">--</span>
             </div>
             <div id="panelLogBox" class="log-box">
-              <div class="log-entry">Waiting for telemetry heartbeat...</div>
+              <div class="log-entry">Awaiting uplink telemetry beacon...</div>
             </div>
           </div>
         </div>
@@ -279,13 +279,13 @@
           <div class="spinner" id="modalSpinner"></div>
         </div>
         <h3 id="modalTitle" class="modal-title">Transmitting to Desk...</h3>
-        <p id="modalDesc" class="modal-desc">Compositing 800x1200 thermal dots and dispatching to bridge.</p>
+        <p id="modalDesc" class="modal-desc">Synthesizing physical dot matrix and dispatching to desk node.</p>
 
         <!-- Pipeline Step Indicator -->
         <div class="pipeline-track" id="pipelineTrack">
           <div class="pipeline-step" id="stepRender">
             <div class="step-dot"></div>
-            <span class="step-name">Render</span>
+            <span class="step-name">Synthesize</span>
           </div>
           <div class="pipeline-line" id="lineRenderQueue"></div>
           <div class="pipeline-step" id="stepQueue">
@@ -295,12 +295,12 @@
           <div class="pipeline-line" id="lineQueueBridge"></div>
           <div class="pipeline-step" id="stepBridge">
             <div class="step-dot"></div>
-            <span class="step-name">Bridge</span>
+            <span class="step-name">Relay</span>
           </div>
           <div class="pipeline-line" id="lineBridgePrint"></div>
           <div class="pipeline-step" id="stepPrint">
             <div class="step-dot"></div>
-            <span class="step-name">Print</span>
+            <span class="step-name">Manifest</span>
           </div>
         </div>
 
@@ -310,11 +310,11 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           </div>
           <div class="alert-content">
-            <div id="modalAlertTitle" class="alert-title">Printer Disconnected</div>
-            <div id="modalAlertDesc" class="alert-desc">The phone bridge is online, but Bluetooth connection to NULLTONEX is lost.</div>
+            <div id="modalAlertTitle" class="alert-title">Desk Node Standing By</div>
+            <div id="modalAlertDesc" class="alert-desc">Uplink relay is active, but wireless connection to the desk physical node is standing by.</div>
             <div class="alert-actions">
-              <button id="btnModalReconnect" class="btn-alert-action primary" type="button">Reconnect Printer</button>
-              <button id="btnModalPrintAnyway" class="btn-alert-action secondary" type="button">Queue Anyway</button>
+              <button id="btnModalReconnect" class="btn-alert-action primary" type="button">Reconnect Node</button>
+              <button id="btnModalPrintAnyway" class="btn-alert-action secondary" type="button">Queue Transmission</button>
             </div>
           </div>
         </div>

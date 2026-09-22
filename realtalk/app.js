@@ -420,9 +420,9 @@
     if (btnModalReconnect) {
       btnModalReconnect.addEventListener('click', async () => {
         btnModalReconnect.disabled = true;
-        btnModalReconnect.textContent = 'Connecting...';
-        if (modalAlertTitle) modalAlertTitle.textContent = 'Connecting to Printer...';
-        if (modalAlertDesc) modalAlertDesc.textContent = 'Signal dispatched to phone. Establishing Bluetooth handshake...';
+        btnModalReconnect.textContent = 'Linking...';
+        if (modalAlertTitle) modalAlertTitle.textContent = 'Linking to Node...';
+        if (modalAlertDesc) modalAlertDesc.textContent = 'Signal dispatched to relay. Establishing wireless handshake...';
 
         await sendBridgeCommand('reconnect_printer');
 
@@ -433,14 +433,14 @@
           if (currentBridgeStatus.printerConnected) {
             clearInterval(connectCheckTimer);
             btnModalReconnect.disabled = false;
-            btnModalReconnect.textContent = 'Reconnect Printer';
+            btnModalReconnect.textContent = 'Reconnect Node';
             executePrintJob();
           } else if (attempts >= 14) {
             clearInterval(connectCheckTimer);
             btnModalReconnect.disabled = false;
-            btnModalReconnect.textContent = 'Retry Reconnect';
-            if (modalAlertTitle) modalAlertTitle.textContent = 'Connection Timeout';
-            if (modalAlertDesc) modalAlertDesc.textContent = 'Printer did not connect within 20s. Ensure printer power is ON, or Queue Anyway.';
+            btnModalReconnect.textContent = 'Retry Handshake';
+            if (modalAlertTitle) modalAlertTitle.textContent = 'Handshake Timeout';
+            if (modalAlertDesc) modalAlertDesc.textContent = 'Desk node did not respond within 20s. Ensure node power is ON, or Queue Transmission.';
           }
         }, 1500);
       });
@@ -2125,16 +2125,16 @@
       btnBridgeStatus.classList.remove('status-connected', 'status-warning', 'status-offline', 'status-checking');
       if (currentBridgeStatus.printerConnected) {
         btnBridgeStatus.classList.add('status-connected');
-        bridgeStatusText.textContent = 'Printer: Connected';
-        btnBridgeStatus.title = 'NULLTONEX connected via Bluetooth. Click for Control Panel.';
+        bridgeStatusText.textContent = 'Desk Node: Online';
+        btnBridgeStatus.title = 'Desk physical node connected. Click for Console.';
       } else if (currentBridgeStatus.phoneOnline) {
         btnBridgeStatus.classList.add('status-warning');
-        bridgeStatusText.textContent = 'Printer: Disconnected';
-        btnBridgeStatus.title = 'Phone bridge online, printer disconnected. Click to reconnect.';
+        bridgeStatusText.textContent = 'Desk Node: Standby';
+        btnBridgeStatus.title = 'Mobile uplink online, desk node standing by. Click to reconnect.';
       } else {
         btnBridgeStatus.classList.add('status-offline');
-        bridgeStatusText.textContent = 'Bridge: Offline';
-        btnBridgeStatus.title = 'Phone bridge is offline. Click for diagnostics.';
+        bridgeStatusText.textContent = 'Uplink: Offline';
+        btnBridgeStatus.title = 'Mobile uplink relay is offline. Click for Console.';
       }
     }
 
@@ -2296,7 +2296,7 @@
     }
 
     // Auto-save snapshot into history on physical print
-    saveSnapshotToHistory('Printed Label');
+    saveSnapshotToHistory('Materialized Card');
 
     // 1. Check bridge status before dispatching to hardware
     if (!bypassBridgeCheck) {
@@ -2306,10 +2306,10 @@
 
       // Case A: Phone is completely offline
       if (!currentBridgeStatus.phoneOnline) {
-        showModal('Phone Bridge Offline', 'The phone is not connected to the cloud server.', 15, 'Queue');
+        showModal('Uplink Relay Offline', 'The mobile uplink is not connected to the cloud server.', 15, 'Queue');
         showModalAlert(
-          'Phone Bridge Offline',
-          'The Android phone is not reporting heartbeats. Please ensure the RealTalk app is open and running on the phone.',
+          'Uplink Relay Offline',
+          'The mobile uplink is not reporting telemetry. Ensure the RealTalk relay app is running on the mobile device.',
           false
         );
         return;
@@ -2317,10 +2317,10 @@
 
       // Case B: Phone is online, but Bluetooth printer is disconnected
       if (!currentBridgeStatus.printerConnected) {
-        showModal('Printer Disconnected', 'Phone is online, but NULLTONEX is disconnected.', 15, 'Bridge');
+        showModal('Desk Node Standing By', 'Mobile uplink is online, but desk physical node is standing by.', 15, 'Bridge');
         showModalAlert(
-          'Printer Disconnected',
-          'Phone is online, but Bluetooth connection to NULLTONEX is disconnected. Reconnect now to print directly.',
+          'Desk Node Standing By',
+          'Mobile uplink is online, but connection to desk physical node is disconnected. Reconnect now to materialize.',
           true
         );
         return;
@@ -2339,20 +2339,20 @@
     saveActiveStickerToState();
     const curSticker = project.stickers.find(s => s.id === project.activeId) || project.stickers[0];
     const activeIdx = project.stickers.indexOf(curSticker);
-    const labelTitle = project.stickers.length > 1 ? `Sticker ${activeIdx + 1} of ${project.stickers.length}` : '4x6 Label';
+    const labelTitle = project.stickers.length > 1 ? `Card ${activeIdx + 1} of ${project.stickers.length}` : 'Physical Card';
 
-    showModal(`Rendering ${labelTitle}...`, 'Compositing monochrome raster dots (800x1200)...', 25, 'Render');
+    showModal(`Synthesizing ${labelTitle}...`, 'Compositing monochrome dot matrix (800x1200)...', 25, 'Render');
 
     try {
       const pngDataUrl = await renderStickerToDataUrl(curSticker);
 
-      updateModal('Queueing Print...', 'Transmitting payload to Cloudflare Queue...', 50, false, 'Queue');
+      updateModal('Queueing Transmission...', 'Dispatched payload to cloud pipeline...', 50, false, 'Queue');
 
       const textSummary = (curSticker.elements || [])
         .filter(e => e.type === 'text')
         .map(e => e.text || '')
         .filter(t => t.length > 0)
-        .join(' | ') || (project.stickers.length > 1 ? `Sticker ${activeIdx + 1}` : 'Canvas Print');
+        .join(' | ') || (project.stickers.length > 1 ? `Card ${activeIdx + 1}` : 'Canvas Card');
 
       const speed = parseFloat(selectPrintSpeed?.value || localStorage.getItem('realtalk_print_speed') || '1.5');
       const density = parseInt(selectPrintDensity?.value || localStorage.getItem('realtalk_print_density') || '12', 10);
@@ -2365,7 +2365,7 @@
           type: 'canvas',
           imageData: pngDataUrl,
           text: textSummary,
-          author: project.stickers.length > 1 ? `Sticker ${activeIdx + 1}/${project.stickers.length}` : 'Canvas',
+          author: project.stickers.length > 1 ? `Card ${activeIdx + 1}/${project.stickers.length}` : 'Card',
           speed,
           density,
           invert
@@ -2381,12 +2381,12 @@
       modalJobId.textContent = `Job ID: ${result.id.slice(0, 8)}`;
 
       // Poll for physical print confirmation
-      updateModal('Transmitting to Phone...', 'Phone bridge received job & is transmitting to NULLTONEX...', 75, false, 'Bridge');
+      updateModal('Relaying to Desk Node...', 'Mobile uplink received payload & is transmitting to desk node...', 75, false, 'Bridge');
       pollPrintStatus(result.id);
 
     } catch (err) {
       console.error(err);
-      updateModal('Transmission Error', err.message || 'Failed to connect to Cloudflare bridge', 100, true);
+      updateModal('Transmission Error', err.message || 'Failed to connect to cloud bridge', 100, true);
       isSubmitting = false;
       btnPrint.disabled = false;
       if (btnPrintAll) btnPrintAll.disabled = false;
@@ -2406,20 +2406,20 @@
       }
 
       if (!currentBridgeStatus.phoneOnline) {
-        showModal('Phone Bridge Offline', 'The phone is not connected to the cloud server.', 15, 'Queue');
+        showModal('Uplink Relay Offline', 'The mobile uplink is not connected to the cloud server.', 15, 'Queue');
         showModalAlert(
-          'Phone Bridge Offline',
-          'The Android phone is not reporting heartbeats. Please ensure the RealTalk app is open and running on the phone.',
+          'Uplink Relay Offline',
+          'The mobile uplink is not reporting telemetry. Ensure the RealTalk relay app is running on the mobile device.',
           false
         );
         return;
       }
 
       if (!currentBridgeStatus.printerConnected) {
-        showModal('Printer Disconnected', 'Phone is online, but NULLTONEX is disconnected.', 15, 'Bridge');
+        showModal('Desk Node Standing By', 'Mobile uplink is online, but desk physical node is standing by.', 15, 'Bridge');
         showModalAlert(
-          'Printer Disconnected',
-          'Phone is online, but Bluetooth connection to NULLTONEX is disconnected. Reconnect now to print directly.',
+          'Desk Node Standing By',
+          'Mobile uplink is online, but connection to desk physical node is disconnected. Reconnect now to materialize.',
           true
         );
         return;
@@ -2436,7 +2436,7 @@
     if (btnPrintAll) btnPrintAll.disabled = true;
 
     const total = project.stickers.length;
-    showModal('Batch Printing Labels...', `Preparing ${total} stickers for thermal printhead...`, 15, 'Render');
+    showModal('Transmitting Card Sequence...', `Synthesizing ${total} cards for physical manifestation...`, 15, 'Render');
 
     try {
       const speed = parseFloat(selectPrintSpeed?.value || localStorage.getItem('realtalk_print_speed') || '1.5');
@@ -2449,8 +2449,8 @@
         const sticker = project.stickers[i];
         const stepPct = Math.round(20 + ((i / total) * 55));
         updateModal(
-          `Queueing Sticker ${i + 1} of ${total}`,
-          `Compositing monochrome raster (800x1200) for sticker ${i + 1}...`,
+          `Synthesizing Card ${i + 1} of ${total}`,
+          `Compositing monochrome dot matrix (800x1200) for card ${i + 1}...`,
           stepPct,
           false,
           'Render'
@@ -2462,7 +2462,7 @@
           .filter(e => e.type === 'text')
           .map(e => e.text || '')
           .filter(t => t.length > 0)
-          .join(' | ') || `Sticker ${i + 1} of ${total}`;
+          .join(' | ') || `Card ${i + 1} of ${total}`;
 
         const response = await fetch(`${WORKER_BASE_URL}/api/quote`, {
           method: 'POST',
@@ -2471,7 +2471,7 @@
             type: 'canvas',
             imageData: pngDataUrl,
             text: textSummary,
-            author: `Sticker ${i + 1}/${total}`,
+            author: `Card ${i + 1}/${total}`,
             speed,
             density,
             invert
@@ -2489,8 +2489,8 @@
       }
 
       updateModal(
-        'Printing Multi-Sticker Project...',
-        `All ${total} stickers queued! Phone is printing sequentially...`,
+        'Materializing Card Sequence...',
+        `All ${total} cards queued. Desk node is materializing sequentially...`,
         80,
         false,
         'Bridge'
@@ -2499,7 +2499,7 @@
       if (lastJobId) {
         pollPrintStatus(lastJobId);
       } else {
-        updateModal('Print Complete', `All ${total} stickers dispatched!`, 100);
+        updateModal('Manifestation Complete', `All ${total} cards dispatched to desk node!`, 100);
         isSubmitting = false;
         btnPrint.disabled = false;
         if (btnPrintAll) btnPrintAll.disabled = false;
@@ -2507,7 +2507,7 @@
 
     } catch (err) {
       console.error(err);
-      updateModal('Batch Print Error', err.message || 'Failed to dispatch batch stickers', 100, true);
+      updateModal('Sequence Transmission Error', err.message || 'Failed to dispatch card sequence', 100, true);
       isSubmitting = false;
       btnPrint.disabled = false;
       if (btnPrintAll) btnPrintAll.disabled = false;
@@ -2652,7 +2652,7 @@
           const data = await res.json();
           if (data.status === 'printed') {
             clearInterval(interval);
-            updateModal('Print Complete', 'Your label has physically burned onto 4x6 thermal paper on Noah\'s desk.', 100, true, 'Print');
+            updateModal('Materialized!', 'Your creation has physically materialized onto paper at Noah\'s desk.', 100, true, 'Print');
             isSubmitting = false;
             btnPrint.disabled = false;
             if (btnPrintAll) btnPrintAll.disabled = false;
@@ -2663,7 +2663,7 @@
 
       if (checks >= maxChecks) {
         clearInterval(interval);
-        updateModal('Queued for Print', 'Your label is in the queue and will print as soon as the bridge checks in.', 100, true, 'Bridge');
+        updateModal('Queued for Manifestation', 'Your transmission is in the queue and will materialize as soon as the desk node checks in.', 100, true, 'Bridge');
         isSubmitting = false;
         btnPrint.disabled = false;
         if (btnPrintAll) btnPrintAll.disabled = false;
