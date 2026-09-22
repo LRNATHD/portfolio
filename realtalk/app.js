@@ -21,6 +21,7 @@
   const PRINT_WIDTH = 800; // Physical dots (203 DPI 4x6" printhead)
   const PRINT_HEIGHT = 1200;
   const STORAGE_DRAFT_KEY = 'realtalk_active_draft_v1';
+  const STORAGE_PROJECT_KEY = 'realtalk_multi_sticker_project_v1';
   const STORAGE_HISTORY_KEY = 'realtalk_canvas_history_v1';
 
   // State
@@ -33,6 +34,20 @@
   let historyListItems = [];
   let autoSaveTimer = null;
   let activeSnapshotId = null;
+
+  // Multi-Sticker Project State
+  let project = {
+    activeId: 'stk_1',
+    viewMode: 'single', // 'single' or 'roll'
+    stickers: [
+      {
+        id: 'stk_1',
+        title: 'Sticker 1',
+        isBlackBg: false,
+        elements: []
+      }
+    ]
+  };
 
   // Bridge Status & Telemetry State
   let currentBridgeStatus = {
@@ -51,6 +66,7 @@
 
   // DOM Elements
   const stage = document.getElementById('stage');
+  const canvasContainer = document.getElementById('canvasContainer');
   const elementsContainer = document.getElementById('elementsContainer');
   const btnAddText = document.getElementById('btnAddText');
   const btnUploadImage = document.getElementById('btnUploadImage');
@@ -60,7 +76,19 @@
   const bgColorText = document.getElementById('bgColorText');
   const btnClear = document.getElementById('btnClear');
   const btnPrint = document.getElementById('btnPrint');
+  const btnPrintLabel = document.getElementById('btnPrintLabel');
+  const btnPrintAll = document.getElementById('btnPrintAll');
+  const lblPrintAllCount = document.getElementById('lblPrintAllCount');
   const btnNewCanvas = document.getElementById('btnNewCanvas');
+
+  // Multi-Sticker Strip DOM
+  const stickerStripBar = document.getElementById('stickerStripBar');
+  const stickerTabs = document.getElementById('stickerTabs');
+  const btnAddSticker = document.getElementById('btnAddSticker');
+  const btnDuplicateSticker = document.getElementById('btnDuplicateSticker');
+  const btnDeleteSticker = document.getElementById('btnDeleteSticker');
+  const btnToggleRollView = document.getElementById('btnToggleRollView');
+  const lblRollViewMode = document.getElementById('lblRollViewMode');
 
   // Header & Bridge Status DOM
   const btnBridgeStatus = document.getElementById('btnBridgeStatus');
@@ -200,6 +228,37 @@
       });
     }
 
+    // Multi-Sticker Navigation Listeners
+    if (btnAddSticker) {
+      btnAddSticker.addEventListener('click', () => {
+        addNewSticker();
+      });
+    }
+
+    if (btnDuplicateSticker) {
+      btnDuplicateSticker.addEventListener('click', () => {
+        duplicateActiveSticker();
+      });
+    }
+
+    if (btnDeleteSticker) {
+      btnDeleteSticker.addEventListener('click', () => {
+        deleteActiveSticker();
+      });
+    }
+
+    if (btnToggleRollView) {
+      btnToggleRollView.addEventListener('click', () => {
+        toggleRollView();
+      });
+    }
+
+    if (btnPrintAll) {
+      btnPrintAll.addEventListener('click', () => {
+        handleBatchPrintSubmission();
+      });
+    }
+
     // Toggle History Drawer / Sidebar
     if (btnToggleHistory) {
       btnToggleHistory.addEventListener('click', () => {
@@ -291,12 +350,16 @@
       });
     }
 
-    // Clear canvas
+    // Clear current sticker
     if (btnClear) {
       btnClear.addEventListener('click', () => {
         if (elements.length === 0) return;
-        if (confirm("Clear this label? (Your previous labels remain safe in History)")) {
-          startNewCanvas();
+        if (confirm("Clear all elements on this sticker?")) {
+          deselectAll();
+          elementsContainer.innerHTML = '';
+          elements = [];
+          saveActiveStickerToState();
+          triggerAutoSave();
         }
       });
     }
@@ -1216,8 +1279,11 @@
     }, 250);
   }
 
-  function saveActiveDraft() {
-    const serializedElements = elements.map(el => ({
+  function saveActiveStickerToState() {
+    const curSticker = project.stickers.find(s => s.id === project.activeId);
+    if (!curSticker) return;
+    curSticker.isBlackBg = isBlackBg;
+    curSticker.elements = elements.map(el => ({
       id: el.id,
       type: el.type,
       x: el.x,
@@ -1232,35 +1298,257 @@
       aspectRatio: el.aspectRatio,
       dataUrl: el.dataUrl
     }));
+  }
 
-    const state = {
-      isBlackBg,
-      elements: serializedElements,
-      updatedAt: Date.now()
-    };
-
+  function saveActiveDraft() {
+    saveActiveStickerToState();
     try {
-      localStorage.setItem(STORAGE_DRAFT_KEY, JSON.stringify(state));
+      localStorage.setItem(STORAGE_PROJECT_KEY, JSON.stringify(project));
     } catch (err) {
-      console.warn('LocalStorage save failed:', err);
+      console.warn('LocalStorage project save failed:', err);
     }
   }
 
   function restoreActiveDraft() {
     try {
-      const raw = localStorage.getItem(STORAGE_DRAFT_KEY);
-      if (!raw) return;
-      const state = JSON.parse(raw);
-      if (state && Array.isArray(state.elements) && state.elements.length > 0) {
-        restoreCanvasFromState(state);
+      const rawProject = localStorage.getItem(STORAGE_PROJECT_KEY);
+      if (rawProject) {
+        const parsed = JSON.parse(rawProject);
+        if (parsed && Array.isArray(parsed.stickers) && parsed.stickers.length > 0) {
+          project = parsed;
+          if (!project.stickers.some(s => s.id === project.activeId)) {
+            project.activeId = project.stickers[0].id;
+          }
+          loadActiveSticker();
+          return;
+        }
+      }
+
+      // Fallback: migrate legacy single-canvas draft
+      const rawSingle = localStorage.getItem(STORAGE_DRAFT_KEY);
+      if (rawSingle) {
+        const singleState = JSON.parse(rawSingle);
+        if (singleState && Array.isArray(singleState.elements) && singleState.elements.length > 0) {
+          project = {
+            activeId: 'stk_1',
+            viewMode: 'single',
+            stickers: [
+              {
+                id: 'stk_1',
+                title: 'Sticker 1',
+                isBlackBg: !!singleState.isBlackBg,
+                elements: singleState.elements || []
+              }
+            ]
+          };
+          loadActiveSticker();
+          saveActiveDraft();
+          return;
+        }
       }
     } catch (err) {
       console.warn('Failed to restore active draft:', err);
     }
+
+    loadActiveSticker();
+  }
+
+  function loadActiveSticker() {
+    const curSticker = project.stickers.find(s => s.id === project.activeId) || project.stickers[0];
+    if (!curSticker) return;
+    project.activeId = curSticker.id;
+    restoreCanvasFromState(curSticker);
+    updateStickerUI();
+  }
+
+  function updateStickerUI() {
+    if (stickerTabs) {
+      stickerTabs.innerHTML = project.stickers.map((s, idx) => {
+        const isActive = s.id === project.activeId;
+        return `<button class="sticker-tab ${isActive ? 'active' : ''}" data-id="${s.id}" title="${escapeHtml(s.title || 'Sticker ' + (idx + 1))}" type="button">${idx + 1}</button>`;
+      }).join('');
+
+      stickerTabs.querySelectorAll('.sticker-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          selectSticker(tab.dataset.id);
+        });
+      });
+    }
+
+    if (btnDeleteSticker) {
+      btnDeleteSticker.disabled = project.stickers.length <= 1;
+    }
+
+    const activeIdx = project.stickers.findIndex(s => s.id === project.activeId);
+    if (btnPrintLabel) {
+      btnPrintLabel.textContent = project.stickers.length > 1
+        ? `Print Sticker ${activeIdx + 1}`
+        : 'Print to Desk';
+    }
+
+    if (btnPrintAll) {
+      if (project.stickers.length > 1) {
+        btnPrintAll.classList.remove('hidden');
+        if (lblPrintAllCount) lblPrintAllCount.textContent = project.stickers.length;
+      } else {
+        btnPrintAll.classList.add('hidden');
+      }
+    }
+
+    if (lblRollViewMode) {
+      lblRollViewMode.textContent = project.viewMode === 'roll' ? 'Single View' : 'Roll View';
+    }
+
+    if (project.viewMode === 'roll') {
+      renderRollViewContainer();
+    } else {
+      renderSingleViewContainer();
+    }
+  }
+
+  function addNewSticker() {
+    saveActiveStickerToState();
+    const newIdx = project.stickers.length + 1;
+    const newId = 'stk_' + Date.now();
+    project.stickers.push({
+      id: newId,
+      title: `Sticker ${newIdx}`,
+      isBlackBg: false,
+      elements: []
+    });
+    project.activeId = newId;
+    loadActiveSticker();
+    triggerAutoSave();
+  }
+
+  function duplicateActiveSticker() {
+    saveActiveStickerToState();
+    const curSticker = project.stickers.find(s => s.id === project.activeId);
+    if (!curSticker) return;
+    const newId = 'stk_' + Date.now();
+    const curIdx = project.stickers.indexOf(curSticker);
+    const clonedElements = JSON.parse(JSON.stringify(curSticker.elements || []));
+    clonedElements.forEach((el, i) => { el.id = i + 1; });
+    const newSticker = {
+      id: newId,
+      title: `${curSticker.title || 'Sticker'} (Copy)`,
+      isBlackBg: curSticker.isBlackBg,
+      elements: clonedElements
+    };
+    project.stickers.splice(curIdx + 1, 0, newSticker);
+    project.activeId = newId;
+    loadActiveSticker();
+    triggerAutoSave();
+  }
+
+  function deleteActiveSticker() {
+    if (project.stickers.length <= 1) return;
+    const curIdx = project.stickers.findIndex(s => s.id === project.activeId);
+    if (curIdx < 0) return;
+    project.stickers.splice(curIdx, 1);
+    const nextIdx = Math.min(curIdx, project.stickers.length - 1);
+    project.activeId = project.stickers[nextIdx].id;
+    loadActiveSticker();
+    triggerAutoSave();
+  }
+
+  function selectSticker(id) {
+    if (id === project.activeId) return;
+    saveActiveStickerToState();
+    project.activeId = id;
+    loadActiveSticker();
+    triggerAutoSave();
+  }
+
+  function toggleRollView() {
+    saveActiveStickerToState();
+    project.viewMode = project.viewMode === 'roll' ? 'single' : 'roll';
+    updateStickerUI();
+    triggerAutoSave();
+  }
+
+  function renderRollViewContainer() {
+    if (!canvasContainer) return;
+    canvasContainer.classList.add('roll-mode');
+    canvasContainer.innerHTML = '';
+
+    project.stickers.forEach((sticker, idx) => {
+      if (idx > 0) {
+        const perfGuide = document.createElement('div');
+        perfGuide.className = 'perforation-guide';
+        perfGuide.innerHTML = `
+          <div class="perforation-line"></div>
+          <span class="perforation-label">Tear-Off Perforation &bull; Sticker ${idx} / ${idx + 1}</span>
+        `;
+        canvasContainer.appendChild(perfGuide);
+      }
+
+      if (sticker.id === project.activeId) {
+        stage.classList.add('active-stage');
+        stage.dataset.stickerIdx = idx;
+        canvasContainer.appendChild(stage);
+      } else {
+        const prevStage = document.createElement('div');
+        prevStage.className = `thermal-stage ${sticker.isBlackBg ? 'black-bg' : ''}`;
+        prevStage.dataset.stickerId = sticker.id;
+        prevStage.dataset.stickerIdx = idx;
+        prevStage.title = `Click to edit ${sticker.title || 'Sticker ' + (idx + 1)}`;
+        prevStage.style.cursor = 'pointer';
+
+        const previewLayer = document.createElement('div');
+        previewLayer.className = 'elements-layer';
+        previewLayer.style.pointerEvents = 'none';
+
+        for (const item of (sticker.elements || [])) {
+          if (item.type === 'text') {
+            const textNode = document.createElement('div');
+            textNode.className = 'canvas-element text-element';
+            textNode.style.left = `${item.x}px`;
+            textNode.style.top = `${item.y}px`;
+            textNode.style.fontSize = `${item.fontSize || 24}px`;
+            textNode.style.color = item.color || (sticker.isBlackBg ? '#ffffff' : '#000000');
+            textNode.style.transform = `rotate(${item.rotation || 0}deg)`;
+            textNode.style.textAlign = item.align || 'center';
+            textNode.innerText = item.text || '';
+            previewLayer.appendChild(textNode);
+          } else if (item.type === 'image' && item.dataUrl) {
+            const imgNode = document.createElement('img');
+            imgNode.className = 'canvas-element image-element';
+            imgNode.src = item.dataUrl;
+            imgNode.style.left = `${item.x}px`;
+            imgNode.style.top = `${item.y}px`;
+            imgNode.style.width = `${item.width || 200}px`;
+            imgNode.style.height = `${item.height || 200}px`;
+            imgNode.style.transform = `rotate(${item.rotation || 0}deg)`;
+            previewLayer.appendChild(imgNode);
+          }
+        }
+
+        prevStage.appendChild(previewLayer);
+
+        const wm = document.createElement('div');
+        wm.className = 'stage-watermark unselectable';
+        wm.textContent = `Sticker ${idx + 1} of ${project.stickers.length}`;
+        prevStage.appendChild(wm);
+
+        prevStage.addEventListener('click', () => {
+          selectSticker(sticker.id);
+        });
+
+        canvasContainer.appendChild(prevStage);
+      }
+    });
+  }
+
+  function renderSingleViewContainer() {
+    if (!canvasContainer) return;
+    canvasContainer.classList.remove('roll-mode');
+    canvasContainer.innerHTML = '';
+    stage.classList.remove('active-stage');
+    canvasContainer.appendChild(stage);
   }
 
   function restoreCanvasFromState(state) {
-    // Clear current DOM elements
     deselectAll();
     elementsContainer.innerHTML = '';
     elements = [];
@@ -1454,13 +1742,21 @@
     if (elements.length > 0) {
       saveSnapshotToHistory('Saved Before New');
     }
-    deselectAll();
-    elementsContainer.innerHTML = '';
-    elements = [];
-    nextElementId = 1;
+    project = {
+      activeId: 'stk_1',
+      viewMode: 'single',
+      stickers: [
+        {
+          id: 'stk_1',
+          title: 'Sticker 1',
+          isBlackBg: false,
+          elements: []
+        }
+      ]
+    };
     activeSnapshotId = null;
-    setStageBgColor(false);
-    localStorage.removeItem(STORAGE_DRAFT_KEY);
+    loadActiveSticker();
+    saveActiveDraft();
     renderHistorySidebar();
     closeHistorySidebar();
   }
@@ -1764,6 +2060,7 @@
   async function handlePrintSubmission(bypassBridgeCheck = false) {
     if (isSubmitting) return;
     deselectAll();
+    saveActiveStickerToState();
 
     if (elements.length === 0) {
       alert("Please add some text or an image to print!");
@@ -1809,52 +2106,25 @@
     hideModalAlert();
     isSubmitting = true;
     btnPrint.disabled = true;
+    if (btnPrintAll) btnPrintAll.disabled = true;
 
-    showModal('Rendering 4x6 Label...', 'Compositing monochrome raster dots (800x1200)...', 25, 'Render');
+    saveActiveStickerToState();
+    const curSticker = project.stickers.find(s => s.id === project.activeId) || project.stickers[0];
+    const activeIdx = project.stickers.indexOf(curSticker);
+    const labelTitle = project.stickers.length > 1 ? `Sticker ${activeIdx + 1} of ${project.stickers.length}` : '4x6 Label';
+
+    showModal(`Rendering ${labelTitle}...`, 'Compositing monochrome raster dots (800x1200)...', 25, 'Render');
 
     try {
-      // 1. Render full 800x1200 high-res canvas
-      const printCanvas = document.createElement('canvas');
-      printCanvas.width = PRINT_WIDTH;
-      printCanvas.height = PRINT_HEIGHT;
-      const ctx = printCanvas.getContext('2d');
+      const pngDataUrl = await renderStickerToDataUrl(curSticker);
 
-      // Fill background (White or Black)
-      ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
-      ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
-
-      const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
-      const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
-
-      // Draw user elements with matrix rotation
-      for (const el of elements) {
-        if (el.type === 'image') {
-          await drawImageElementToCanvas(ctx, el, scaleX, scaleY);
-        } else if (el.type === 'text') {
-          drawTextElementToCanvas(ctx, el, scaleX, scaleY);
-        }
-      }
-
-      // Subtle corner watermark
-      ctx.fillStyle = isBlackBg ? '#ffffff' : '#000000';
-      ctx.font = '16px monospace';
-      const watermark = 'made by noahsmith.dev';
-      const wmWidth = ctx.measureText(watermark).width;
-      ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
-
-      // Strict 1-bit threshold pass to guarantee pure monochrome dots
-      enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT);
-
-      const pngDataUrl = printCanvas.toDataURL('image/png');
-
-      // 2. Submit to Cloudflare Worker Queue
       updateModal('Queueing Print...', 'Transmitting payload to Cloudflare Queue...', 50, false, 'Queue');
 
-      const textSummary = elements
+      const textSummary = (curSticker.elements || [])
         .filter(e => e.type === 'text')
-        .map(e => e.contentNode.innerText.trim())
+        .map(e => e.text || '')
         .filter(t => t.length > 0)
-        .join(' | ') || 'Canvas Print';
+        .join(' | ') || (project.stickers.length > 1 ? `Sticker ${activeIdx + 1}` : 'Canvas Print');
 
       const speed = parseFloat(selectPrintSpeed?.value || localStorage.getItem('realtalk_print_speed') || '1.5');
       const density = parseInt(selectPrintDensity?.value || localStorage.getItem('realtalk_print_density') || '12', 10);
@@ -1867,7 +2137,7 @@
           type: 'canvas',
           imageData: pngDataUrl,
           text: textSummary,
-          author: 'Canvas',
+          author: project.stickers.length > 1 ? `Sticker ${activeIdx + 1}/${project.stickers.length}` : 'Canvas',
           speed,
           density,
           invert
@@ -1882,7 +2152,7 @@
       const result = await response.json();
       modalJobId.textContent = `Job ID: ${result.id.slice(0, 8)}`;
 
-      // 3. Poll for physical print confirmation
+      // Poll for physical print confirmation
       updateModal('Transmitting to Phone...', 'Phone bridge received job & is transmitting to NULLTONEX...', 75, false, 'Bridge');
       pollPrintStatus(result.id);
 
@@ -1891,7 +2161,209 @@
       updateModal('Transmission Error', err.message || 'Failed to connect to Cloudflare bridge', 100, true);
       isSubmitting = false;
       btnPrint.disabled = false;
+      if (btnPrintAll) btnPrintAll.disabled = false;
     }
+  }
+
+  async function handleBatchPrintSubmission(bypassBridgeCheck = false) {
+    if (isSubmitting) return;
+    deselectAll();
+    saveActiveStickerToState();
+
+    if (project.stickers.length === 0) return;
+
+    if (!bypassBridgeCheck) {
+      if (Date.now() - currentBridgeStatus.lastUpdated > 6000) {
+        await fetchBridgeStatus();
+      }
+
+      if (!currentBridgeStatus.phoneOnline) {
+        showModal('Phone Bridge Offline', 'The phone is not connected to the cloud server.', 15, 'Queue');
+        showModalAlert(
+          'Phone Bridge Offline',
+          'The Android phone is not reporting heartbeats. Please ensure the RealTalk app is open and running on the phone.',
+          false
+        );
+        return;
+      }
+
+      if (!currentBridgeStatus.printerConnected) {
+        showModal('Printer Disconnected', 'Phone is online, but NULLTONEX is disconnected.', 15, 'Bridge');
+        showModalAlert(
+          'Printer Disconnected',
+          'Phone is online, but Bluetooth connection to NULLTONEX is disconnected. Reconnect now to print directly.',
+          true
+        );
+        return;
+      }
+    }
+
+    executeBatchPrintJob();
+  }
+
+  async function executeBatchPrintJob() {
+    hideModalAlert();
+    isSubmitting = true;
+    btnPrint.disabled = true;
+    if (btnPrintAll) btnPrintAll.disabled = true;
+
+    const total = project.stickers.length;
+    showModal('Batch Printing Labels...', `Preparing ${total} stickers for thermal printhead...`, 15, 'Render');
+
+    try {
+      const speed = parseFloat(selectPrintSpeed?.value || localStorage.getItem('realtalk_print_speed') || '1.5');
+      const density = parseInt(selectPrintDensity?.value || localStorage.getItem('realtalk_print_density') || '12', 10);
+      const invert = (selectPrintPolarity?.value || localStorage.getItem('realtalk_print_polarity') || 'standard') === 'inverted';
+
+      let lastJobId = null;
+
+      for (let i = 0; i < total; i++) {
+        const sticker = project.stickers[i];
+        const stepPct = Math.round(20 + ((i / total) * 55));
+        updateModal(
+          `Queueing Sticker ${i + 1} of ${total}`,
+          `Compositing monochrome raster (800x1200) for sticker ${i + 1}...`,
+          stepPct,
+          false,
+          'Render'
+        );
+
+        const pngDataUrl = await renderStickerToDataUrl(sticker);
+
+        const textSummary = (sticker.elements || [])
+          .filter(e => e.type === 'text')
+          .map(e => e.text || '')
+          .filter(t => t.length > 0)
+          .join(' | ') || `Sticker ${i + 1} of ${total}`;
+
+        const response = await fetch(`${WORKER_BASE_URL}/api/quote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'canvas',
+            imageData: pngDataUrl,
+            text: textSummary,
+            author: `Sticker ${i + 1}/${total}`,
+            speed,
+            density,
+            invert
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || `Server error ${response.status}`);
+        }
+
+        const result = await response.json();
+        lastJobId = result.id;
+        modalJobId.textContent = `Job ID: ${result.id.slice(0, 8)} (${i + 1}/${total})`;
+      }
+
+      updateModal(
+        'Printing Multi-Sticker Project...',
+        `All ${total} stickers queued! Phone is printing sequentially...`,
+        80,
+        false,
+        'Bridge'
+      );
+
+      if (lastJobId) {
+        pollPrintStatus(lastJobId);
+      } else {
+        updateModal('Print Complete', `All ${total} stickers dispatched!`, 100);
+        isSubmitting = false;
+        btnPrint.disabled = false;
+        if (btnPrintAll) btnPrintAll.disabled = false;
+      }
+
+    } catch (err) {
+      console.error(err);
+      updateModal('Batch Print Error', err.message || 'Failed to dispatch batch stickers', 100, true);
+      isSubmitting = false;
+      btnPrint.disabled = false;
+      if (btnPrintAll) btnPrintAll.disabled = false;
+    }
+  }
+
+  async function renderStickerToDataUrl(sticker) {
+    const printCanvas = document.createElement('canvas');
+    printCanvas.width = PRINT_WIDTH;
+    printCanvas.height = PRINT_HEIGHT;
+    const ctx = printCanvas.getContext('2d');
+
+    // Fill background (White or Black)
+    ctx.fillStyle = sticker.isBlackBg ? '#000000' : '#ffffff';
+    ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
+
+    const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
+    const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
+
+    // Draw elements
+    for (const el of (sticker.elements || [])) {
+      if (el.type === 'image' && el.dataUrl) {
+        await drawImageElementToCanvas(ctx, el, scaleX, scaleY);
+      } else if (el.type === 'text') {
+        drawSerializedTextToCanvas(ctx, el, scaleX, scaleY, sticker.isBlackBg);
+      }
+    }
+
+    // Subtle corner watermark
+    ctx.fillStyle = sticker.isBlackBg ? '#ffffff' : '#000000';
+    ctx.font = '16px monospace';
+    const watermark = 'made by noahsmith.dev';
+    const wmWidth = ctx.measureText(watermark).width;
+    ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
+
+    // Strict 1-bit threshold pass to guarantee pure monochrome dots
+    enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT);
+
+    return printCanvas.toDataURL('image/png');
+  }
+
+  function drawSerializedTextToCanvas(ctx, el, scaleX, scaleY, isStickerBlackBg) {
+    const text = el.text || '';
+    const lines = text.split('\n');
+    const fontSize = (el.fontSize || 24) * scaleX;
+    const lineHeight = fontSize * 1.25;
+    const totalHeight = lines.length * lineHeight;
+
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    let maxLineWidth = 0;
+    for (const line of lines) {
+      const tw = ctx.measureText(line).width;
+      if (tw > maxLineWidth) maxLineWidth = tw;
+    }
+
+    const domW = el.width ? (el.width * scaleX) : (maxLineWidth + 12 * scaleX);
+    const domH = el.height ? (el.height * scaleY) : (totalHeight + 8 * scaleY);
+    const cx = (el.x * scaleX) + (domW / 2);
+    const cy = (el.y * scaleY) + (domH / 2);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (el.rotation) {
+      ctx.rotate((el.rotation * Math.PI) / 180);
+    }
+
+    ctx.fillStyle = el.color || (isStickerBlackBg ? '#ffffff' : '#000000');
+    const startY = -(totalHeight / 2) + fontSize * 0.85;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const y = startY + (i * lineHeight);
+
+      if (el.align === 'center') {
+        const tw = ctx.measureText(line).width;
+        ctx.fillText(line, -(tw / 2), y);
+      } else if (el.align === 'right') {
+        const tw = ctx.measureText(line).width;
+        ctx.fillText(line, (domW / 2) - tw - 6 * scaleX, y);
+      } else {
+        ctx.fillText(line, -(domW / 2) + 6 * scaleX, y);
+      }
+    }
+    ctx.restore();
   }
 
   function drawImageElementToCanvas(ctx, el, scaleX, scaleY) {
@@ -1915,51 +2387,6 @@
       img.onerror = () => resolve();
       img.src = el.dataUrl;
     });
-  }
-
-  function drawTextElementToCanvas(ctx, el, scaleX, scaleY) {
-    const text = el.contentNode.innerText;
-    const lines = text.split('\n');
-    const fontSize = el.fontSize * scaleX;
-    const lineHeight = fontSize * 1.25;
-    const totalHeight = lines.length * lineHeight;
-
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    let maxLineWidth = 0;
-    for (const line of lines) {
-      const tw = ctx.measureText(line).width;
-      if (tw > maxLineWidth) maxLineWidth = tw;
-    }
-
-    const domW = (el.domNode.offsetWidth || (maxLineWidth / scaleX) + 12);
-    const domH = (el.domNode.offsetHeight || (totalHeight / scaleY) + 8);
-    const cx = (el.x + domW / 2) * scaleX;
-    const cy = (el.y + domH / 2) * scaleY;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    if (el.rotation) {
-      ctx.rotate((el.rotation * Math.PI) / 180);
-    }
-
-    ctx.fillStyle = el.color || (isBlackBg ? '#ffffff' : '#000000');
-    const startY = -(totalHeight / 2) + fontSize * 0.85;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const y = startY + (i * lineHeight);
-
-      if (el.align === 'center') {
-        const textW = ctx.measureText(line).width;
-        ctx.fillText(line, -(textW / 2), y);
-      } else if (el.align === 'right') {
-        const textW = ctx.measureText(line).width;
-        ctx.fillText(line, (domW * scaleX / 2) - textW - 6, y);
-      } else {
-        ctx.fillText(line, -(domW * scaleX / 2) + 6, y);
-      }
-    }
-    ctx.restore();
   }
 
   function enforceStrictMonochrome(ctx, w, h) {
@@ -1991,6 +2418,7 @@
             updateModal('Print Complete', 'Your label has physically burned onto 4x6 thermal paper on Noah\'s desk.', 100, true, 'Print');
             isSubmitting = false;
             btnPrint.disabled = false;
+            if (btnPrintAll) btnPrintAll.disabled = false;
             return;
           }
         }
@@ -2001,6 +2429,7 @@
         updateModal('Queued for Print', 'Your label is in the queue and will print as soon as the bridge checks in.', 100, true, 'Bridge');
         isSubmitting = false;
         btnPrint.disabled = false;
+        if (btnPrintAll) btnPrintAll.disabled = false;
       }
     }, 2000);
   }

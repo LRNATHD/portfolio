@@ -30,9 +30,12 @@
           <span>Past Labels</span>
           <span id="historyBadge" class="history-count-badge">0</span>
         </button>
-        <button id="btnPrint" class="btn-print" title="Print this label to Noah's desk">
+        <button id="btnPrint" class="btn-print" title="Print active sticker to Noah's desk">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          <span class="btn-label">Print to Desk</span>
+          <span class="btn-label" id="btnPrintLabel">Print to Desk</span>
+        </button>
+        <button id="btnPrintAll" class="btn-print-all hidden" title="Batch print all stickers in this project sequentially" type="button">
+          <span>Print All (<span id="lblPrintAllCount">1</span>)</span>
         </button>
       </div>
     </header>
@@ -67,9 +70,35 @@
     <div class="workspace-layout">
       <!-- Canvas Workspace Area -->
       <main class="canvas-workspace">
+        <!-- Multi-Sticker Project Navigation Bar -->
+        <div class="sticker-strip-bar" id="stickerStripBar">
+          <div class="sticker-strip-left">
+            <span class="strip-label">Project:</span>
+            <div class="sticker-tabs" id="stickerTabs">
+              <!-- Dynamically populated: [ 1 ] [ 2 ] [ 3 ] ... -->
+            </div>
+            <button id="btnAddSticker" class="btn-strip-action primary" type="button" title="Add a new 4x6 sticker to this project">
+              <span>+ Add Sticker</span>
+            </button>
+          </div>
+
+          <div class="sticker-strip-right">
+            <button id="btnDuplicateSticker" class="btn-strip-action" type="button" title="Duplicate current sticker">
+              <span>Duplicate</span>
+            </button>
+            <button id="btnDeleteSticker" class="btn-strip-action danger" type="button" title="Delete current sticker">
+              <span>Delete</span>
+            </button>
+            <div class="strip-separator"></div>
+            <button id="btnToggleRollView" class="btn-strip-action" type="button" title="Toggle between single sticker and continuous roll view">
+              <span id="lblRollViewMode">Roll View</span>
+            </button>
+          </div>
+        </div>
+
         <div class="canvas-container" id="canvasContainer">
           <!-- 4x6" Interactive Thermal Label Stage -->
-          <div class="thermal-stage" id="stage">
+          <div class="thermal-stage" id="stage" data-sticker-idx="0">
             <!-- Active elements container -->
             <div id="elementsContainer" class="elements-layer"></div>
 

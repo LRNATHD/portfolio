@@ -208,6 +208,32 @@ html, body {
   background: #2ed66b;
 }
 
+.btn-print-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-print-all:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: var(--accent-green);
+}
+
+.btn-print-all.hidden {
+  display: none !important;
+}
+
 .btn-print:active {
   transform: scale(0.97);
 }
@@ -298,12 +324,180 @@ html, body {
   min-width: 0;
 }
 
+/* --------------------------------------------------------------------------
+   Multi-Sticker Strip Navigation
+   -------------------------------------------------------------------------- */
+.sticker-strip-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.sticker-strip-left,
+.sticker-strip-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.sticker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  max-width: 180px;
+}
+
+.sticker-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sticker-tab:hover {
+  color: var(--text-primary);
+  border-color: #373b4d;
+}
+
+.sticker-tab.active {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-green);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.btn-strip-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-strip-action:hover {
+  background: #242735;
+  border-color: #373b4d;
+}
+
+.btn-strip-action.primary {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-green);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.btn-strip-action.primary:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: var(--accent-green);
+}
+
+.btn-strip-action.danger {
+  color: #f87171;
+}
+
+.btn-strip-action.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-strip-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.strip-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  margin: 0 2px;
+}
+
 .canvas-container {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
   padding: 8px;
+}
+
+/* Continuous Roll View */
+.canvas-container.roll-mode {
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  max-height: 75vh;
+  padding: 16px;
+}
+
+.perforation-guide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 400px;
+  height: 36px;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.perforation-line {
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  border-top: 1.5px dashed rgba(255, 255, 255, 0.25);
+}
+
+.perforation-label {
+  position: relative;
+  background: var(--bg-base);
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.thermal-stage.active-stage {
+  box-shadow: 0 0 0 2px var(--accent-green), 0 16px 36px rgba(0, 0, 0, 0.5);
 }
 
 /* 4x6" Thermal Paper Label (400 x 600 CSS pixels = 2:3 aspect ratio) */
