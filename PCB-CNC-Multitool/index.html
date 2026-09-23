@@ -5,10 +5,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PCB CNC Multitool — Noah Smith</title>
-  <meta name="description" content="PCB CNC Multitool — Senior final project by Noah Smith. Hardware documentation, schematics, and project writeups coming soon." />
+  <meta name="description" content="PCB CNC Multitool — Senior final capstone project by Noah Smith. Hardware documentation, schematics, fabrication logs, and project proposal." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *,
     *::before,
@@ -19,74 +19,496 @@
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #000;
       color: #e4e4e7;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
+      line-height: 1.6;
+      padding: 2.5rem 1.5rem 5rem;
       -webkit-font-smoothing: antialiased;
     }
 
-    .page {
-      max-width: 480px;
-      text-align: left;
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
     }
 
-    .badge {
-      display: inline-block;
-      font-size: 0.75rem;
-      font-weight: 500;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #71717a;
-      border: 1px solid #27272a;
-      padding: 0.25rem 0.6rem;
-      border-radius: 9999px;
-      margin-bottom: 1.25rem;
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 500;
-      margin-bottom: 1.25rem;
-      letter-spacing: -0.01em;
-      color: #f4f4f5;
-    }
-
-    p {
-      font-size: 0.95rem;
-      line-height: 1.7;
-      color: #8b8b96;
-      margin-bottom: 0.75rem;
+    /* Navigation */
+    .top-nav {
+      margin-bottom: 2.5rem;
     }
 
     .back-link {
-      display: inline-block;
-      margin-top: 1.5rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
       font-size: 0.85rem;
       color: #71717a;
       text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: color 0.15s ease, border-color 0.15s ease;
+      transition: color 0.15s ease;
     }
 
     .back-link:hover {
       color: #e4e4e7;
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid #1c1c22;
+      padding-bottom: 2rem;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #a1a1aa;
+      border: 1px solid #27272a;
+      background: #09090b;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: #f4f4f5;
+      margin-bottom: 0.75rem;
+    }
+
+    .lead {
+      font-size: 1.05rem;
+      color: #a1a1aa;
+      max-width: 700px;
+      line-height: 1.6;
+    }
+
+    /* Action Buttons */
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.55rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary {
+      background: #e4e4e7;
+      color: #09090b;
+    }
+
+    .btn-primary:hover {
+      background: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #121217;
+      color: #d4d4d8;
+      border: 1px solid #27272a;
+    }
+
+    .btn-secondary:hover {
+      background: #18181f;
       border-color: #3f3f46;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    /* Section Styling */
+    section {
+      margin-bottom: 3.5rem;
+    }
+
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: #f4f4f5;
+      margin-bottom: 0.5rem;
+    }
+
+    .section-subtitle {
+      font-size: 0.9rem;
+      color: #71717a;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Proposal Card */
+    .proposal-card {
+      background: #0d0d12;
+      border: 1px solid #1f1f28;
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .proposal-card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #f4f4f5;
+      margin-bottom: 0.5rem;
+    }
+
+    .proposal-desc {
+      font-size: 0.95rem;
+      color: #a1a1aa;
+      margin-bottom: 1.25rem;
+    }
+
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .feature-list li {
+      font-size: 0.9rem;
+      color: #d4d4d8;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+    }
+
+    .feature-list li::before {
+      content: "•";
+      color: #38bdf8;
+      font-weight: bold;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    /* PDF Viewer Frame */
+    .pdf-container {
+      background: #0d0d12;
+      border: 1px solid #1f1f28;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .pdf-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      background: #13131a;
+      border-bottom: 1px solid #1f1f28;
+      font-size: 0.85rem;
+      color: #a1a1aa;
+    }
+
+    .pdf-frame {
+      width: 100%;
+      height: 600px;
+      border: none;
+      display: block;
+      background: #18181f;
+    }
+
+    /* Gallery / Foundations Grid */
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .project-card {
+      background: #0d0d12;
+      border: 1px solid #1f1f28;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .project-card:hover {
+      border-color: #2e2e3d;
+      transform: translateY(-2px);
+    }
+
+    .project-card-image {
+      width: 100%;
+      aspect-ratio: 16/10;
+      background: #14141c;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .project-card-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+
+    .project-card:hover .project-card-image img {
+      transform: scale(1.03);
+    }
+
+    .project-card-body {
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+    }
+
+    .project-card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f4f4f5;
+      margin-bottom: 0.5rem;
+    }
+
+    .project-card-desc {
+      font-size: 0.85rem;
+      color: #8b8b96;
+      line-height: 1.55;
+      margin-bottom: 1rem;
+      flex-grow: 1;
+    }
+
+    .project-card-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: auto;
+    }
+
+    .card-link {
+      font-size: 0.75rem;
+      color: #38bdf8;
+      text-decoration: none;
+      border: 1px solid #1e293b;
+      background: #0f172a33;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .card-link:hover {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #0284c7;
+    }
+
+    /* Subgrid for multi-image cards */
+    .image-subgrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      height: 100%;
+    }
+
+    .image-subgrid img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Footer */
+    .footer {
+      border-top: 1px solid #1c1c22;
+      padding-top: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #52525b;
+    }
+
+    .footer a {
+      color: #71717a;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: #e4e4e7;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 1.5rem 1rem 3rem;
+      }
+      .pdf-frame {
+        height: 420px;
+      }
+      .action-row {
+        flex-direction: column;
+      }
+      .btn {
+        justify-content: center;
+      }
     }
   </style>
 </head>
 
 <body>
-  <div class="page">
-    <div class="badge">Senior Final Project</div>
-    <h1>PCB CNC Multitool</h1>
-    <p>This page is reserved for my high school senior year final project: the PCB CNC Multitool.</p>
-    <p>Hardware documentation, schematics, CAD models, and build logs will be documented here as development progresses.</p>
-    <a href="/" class="back-link">&larr; Back to noahsmith.dev</a>
+  <div class="container">
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <a href="/" class="back-link">&larr; Back to noahsmith.dev</a>
+    </nav>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="badge">Senior Final Project &bull; Capstone Proposal</div>
+      <h1>PCB CNC Multitool</h1>
+      <p class="lead">
+        A custom gantry platform with interchangeable toolheads, engineered for solder paste dispensing, PCB isolation milling, and automated hardware fabrication.
+      </p>
+
+      <div class="action-row">
+        <a href="noah-smith-capstone-proposal.pdf" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Open / Download PDF
+        </a>
+        <a href="https://docs.google.com/document/d/1i6KTDVhFmOjcudY0t4AXIAZAEwT9k0OK3NgxP7c3U2Y/edit?tab=t.0" class="btn btn-secondary" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+          Design Specs Doc
+        </a>
+        <a href="https://docs.google.com/document/d/1Bw7Dy0QGhG4nVSc6mnhkiW14WBOkesEI--meJ7AhV4Y/edit?usp=sharing" class="btn btn-secondary" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+          Floor Plan Doc
+        </a>
+      </div>
+    </header>
+
+    <!-- Capstone Proposal Overview -->
+    <section>
+      <h2 class="section-title">Capstone Proposal</h2>
+      <p class="section-subtitle">System architecture and mechanical considerations for the multitool.</p>
+
+      <div class="proposal-card">
+        <h3>System Architecture</h3>
+        <p class="proposal-desc">
+          A rigid gantry with a modular, customizable toolhead designed to automate PCB assembly. The primary target is dispensing solder paste onto surface mount pads, with expansion capabilities for pick-and-place, probing, and isolation milling.
+        </p>
+
+        <ul class="feature-list">
+          <li><strong>Moving Bed Concept:</strong> Translates the PCB underneath the fixed toolhead assembly, minimizing moving mass and significantly simplifying toolhead mechanical design.</li>
+          <li><strong>Robust Rigid Gantry:</strong> Designed with high stiffness to prevent tool deflection during precision dispensing and milling passes.</li>
+          <li><strong>Modular Toolhead Mount:</strong> Standardized mounting bracket allowing rapid swaps between solder paste syringe dispensers and auxiliary toolheads.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Embedded PDF Viewer -->
+    <section>
+      <h2 class="section-title">Presentation Document</h2>
+      <p class="section-subtitle">Embedded slides from the initial capstone proposal presentation.</p>
+
+      <div class="pdf-container">
+        <div class="pdf-toolbar">
+          <span>Noah Smith &bull; Capstone Proposal Presentation</span>
+          <a href="noah-smith-capstone-proposal.pdf" target="_blank" rel="noopener" style="color: #38bdf8; text-decoration: none; font-size: 0.8rem;">Open Fullscreen &nearr;</a>
+        </div>
+        <iframe src="noah-smith-capstone-proposal.pdf#toolbar=0" class="pdf-frame" title="Noah Smith Capstone Proposal PDF">
+          <p style="padding: 2rem; color: #a1a1aa; text-align: center;">
+            Your browser does not support embedded PDF viewing. 
+            <a href="noah-smith-capstone-proposal.pdf" style="color: #38bdf8;">Click here to download the PDF</a>.
+          </p>
+        </iframe>
+      </div>
+    </section>
+
+    <!-- Fabrication Foundations -->
+    <section>
+      <h2 class="section-title">Fabrication Foundations</h2>
+      <p class="section-subtitle">Hands-on rapid prototyping, machining, and electronics manufacturing experience informing this project.</p>
+
+      <div class="projects-grid">
+        <!-- Storage Box -->
+        <article class="project-card">
+          <div class="project-card-image">
+            <div class="image-subgrid">
+              <img src="images/page1_img1_Image3.jpg" alt="Laser cut template diagram" loading="lazy" />
+              <img src="images/page1_img2_Image4.jpg" alt="Laser-engraved storage box" loading="lazy" />
+            </div>
+          </div>
+          <div class="project-card-body">
+            <h3 class="project-card-title">Laser Cut Storage Box</h3>
+            <p class="project-card-desc">
+              Parametric cardboard box packaging with raster laser engraving, circular viewport, and press-fit assembly.
+            </p>
+            <div class="project-card-links">
+              <a href="https://drive.google.com/file/d/1l4H3Q-VUPFs9J1LiRQ85euGMzXk05oA5/view?usp=sharing" class="card-link" target="_blank" rel="noopener">Vector File Link &nearr;</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Pen Turning -->
+        <article class="project-card">
+          <div class="project-card-image">
+            <img src="images/page2_img1_Image5.jpg" alt="Turned wooden pen" loading="lazy" />
+          </div>
+          <div class="project-card-body">
+            <h3 class="project-card-title">Precision Pen Turning</h3>
+            <p class="project-card-desc">
+              Two-tone segmented wood turning on a lathe with polished center band, tapered grip profile, and tight mechanical tolerances.
+            </p>
+          </div>
+        </article>
+
+        <!-- CNC PCB Milling -->
+        <article class="project-card">
+          <div class="project-card-image">
+            <img src="images/page3_img1_Image6.jpg" alt="CNC milled circuit board" loading="lazy" />
+          </div>
+          <div class="project-card-body">
+            <h3 class="project-card-title">CNC Isolation Milling</h3>
+            <p class="project-card-desc">
+              Direct PCB isolation milling on copper clad stock, routing trace isolation channels and drill holes without chemical etching.
+            </p>
+          </div>
+        </article>
+
+        <!-- Surface Mount Soldering -->
+        <article class="project-card">
+          <div class="project-card-image">
+            <div class="image-subgrid">
+              <img src="images/page4_img1_Image7.jpg" alt="Tri-lobed spinner PCB" loading="lazy" />
+              <img src="images/page4_img2_Image8.jpg" alt="Illuminated spinning PCB" loading="lazy" />
+            </div>
+          </div>
+          <div class="project-card-body">
+            <h3 class="project-card-title">Surface Mount Soldering</h3>
+            <p class="project-card-desc">
+              Fine-pitch SMD hand soldering, reflow, and testing. Custom tri-lobe persistence-of-vision spinner board with LEDs, microcontroller, and passive array.
+            </p>
+            <div class="project-card-links">
+              <a href="https://docs.google.com/file/d/1fEZOltY9guDAKgXvpDPEBnM_diduIa-m/preview" class="card-link" target="_blank" rel="noopener">Video Demo 1 &nearr;</a>
+              <a href="https://docs.google.com/file/d/1uM9Gpe2BnE1d0Ge9-UVNLx958uA8Smzw/preview" class="card-link" target="_blank" rel="noopener">Video Demo 2 &nearr;</a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>Noah Smith &bull; Senior Final Project</span>
+      <a href="/">&larr; noahsmith.dev</a>
+    </footer>
   </div>
 </body>
 

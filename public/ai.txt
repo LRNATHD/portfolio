@@ -1,0 +1,20 @@
+RULES
+====
+1. Static assets copied verbatim by Vite to dist/ root on build
+2. Maintain CNAME file for custom domain noahsmith.dev
+3. Place static downloads or unbundled assets here
+
+KEY INFO
+====
+| Item     | Value                                 |
+| Purpose  | Vite public directory (copied to dist) |
+| Domain   | noahsmith.dev via CNAME               |
+
+COMMANDS
+====
+npm run build      # copies public/ to dist/
+
+CHECKLIST
+====
+[x] CNAME file for custom domain
+[x] Static assets for PCB-CNC-Multitool

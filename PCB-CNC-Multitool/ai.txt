@@ -13,6 +13,7 @@ KEY INFO
 | Entry point | PCB-CNC-Multitool/index.html                     |
 | Config      | rollupOptions.input in vite.config.js            |
 | Topic       | PCB CNC Multitool (Senior Final Project)         |
+| PDF Asset   | PCB-CNC-Multitool/noah-smith-capstone-proposal.pdf|
 
 COMMANDS
 ====
@@ -42,7 +43,9 @@ FIX: Add 'PCB-CNC-Multitool' entry to rollupOptions.input in vite.config.js
 CHECKLIST
 ====
 [x] Create placeholder index.html
-[ ] Add project title and description
+[x] Integrate capstone proposal PDF and embedded viewer
+[x] Add fabrication project sections with high-res photos
+[x] Add document and video links from proposal
 [ ] Add schematics and PCB design details
 [ ] Add build photos and video demo
 [ ] Add BOM and component references

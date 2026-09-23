@@ -1,0 +1,26 @@
+RULES
+====
+1. Store extracted high-resolution assets from capstone proposal PDF
+2. Maintain original image quality and aspect ratios
+3. Reference paths relatively from PCB-CNC-Multitool/index.html (images/filename.jpg)
+
+KEY INFO
+====
+| File                   | Description                              |
+| page1_img1_Image3.jpg  | Laser cut diagram for cardboard box      |
+| page1_img2_Image4.jpg  | Finished laser-engraved storage box      |
+| page2_img1_Image5.jpg  | Wood-turned pen photo                    |
+| page3_img1_Image6.jpg  | CNC isolation-milled PCB prototype       |
+| page4_img1_Image7.jpg  | Custom tri-lobe spinner PCB              |
+| page4_img2_Image8.jpg  | Spinning illuminated LED PCB             |
+| page4_img3_Image9.jpg  | Surface mount soldering in progress      |
+| page4_img4_Image10.jpg | Completed SMD circuit board              |
+
+COMMANDS
+====
+python -c "import pypdf; print('OK')"
+
+CHECKLIST
+====
+[x] Extract all 8 images from proposal PDF
+[ ] Add thumbnails if needed for lazy loading
