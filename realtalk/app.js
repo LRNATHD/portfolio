@@ -658,95 +658,40 @@
   // --------------------------------------------------------------------------
 
   /**
-   * Extracts visual wrapped lines directly from an active contenteditable DOM element.
-   * Uses Range.getClientRects() to detect when the browser breaks text across lines.
-   */
-  function extractLinesFromDom(contentNode) {
-    if (!contentNode) return null;
-    const rawText = contentNode.innerText || '';
-    if (!rawText.trim()) return [];
-
-    const lines = [];
-    let currentLine = '';
-    let lastTop = null;
-    const range = document.createRange();
-
-    const walker = document.createTreeWalker(contentNode, NodeFilter.SHOW_TEXT);
-    let textNode;
-    const textNodes = [];
-    while ((textNode = walker.nextNode())) {
-      textNodes.push(textNode);
-    }
-
-    if (textNodes.length === 0) {
-      return rawText.split('\n');
-    }
-
-    for (const tn of textNodes) {
-      const val = tn.nodeValue || '';
-      for (let i = 0; i < val.length; i++) {
-        const ch = val[i];
-        if (ch === '\n' || ch === '\r') {
-          if (currentLine.trim()) lines.push(currentLine.trim());
-          currentLine = '';
-          lastTop = null;
-          continue;
-        }
-
-        try {
-          range.setStart(tn, i);
-          range.setEnd(tn, i + 1);
-          const rects = range.getClientRects();
-
-          if (rects.length > 0) {
-            const top = Math.round(rects[0].top);
-            if (lastTop === null) {
-              lastTop = top;
-            } else if (top > lastTop + 4) {
-              if (currentLine.trim()) {
-                lines.push(currentLine.trim());
-              }
-              currentLine = '';
-              lastTop = top;
-            }
-          }
-        } catch (ignored) {}
-
-        currentLine += ch;
-      }
-    }
-
-    if (currentLine.trim()) {
-      lines.push(currentLine.trim());
-    }
-
-    return lines.length > 0 ? lines : rawText.split('\n');
-  }
-
-  /**
    * Pure algorithmic word-wrapping for canvas contexts.
-   * Breaks paragraphs by spaces and measures each word, with character-break fallback for long words.
+   * Breaks text by paragraphs (newlines) and word-wraps each paragraph to maxWidth.
+   * Explicit user Enters and blank lines are strictly preserved to ensure visual line breaks space correctly.
    */
   function wrapTextParagraphs(text, measureFn, maxWidth) {
     if (!text) return [];
     const lines = [];
-    const paragraphs = text.split('\n');
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const paragraphs = normalized.split('\n');
 
     for (const para of paragraphs) {
-      if (!para.trim()) {
+      // Empty paragraph (created by pressing Enter): preserve as empty line for vertical spacing
+      if (!para || !para.trim()) {
         lines.push('');
         continue;
       }
-      const words = para.trim().split(/\s+/);
+
+      // If the paragraph fits in one line, avoid word-splitting
+      if (measureFn(para) <= maxWidth + 6) {
+        lines.push(para);
+        continue;
+      }
+
+      const words = para.split(' ');
       let currentLine = '';
 
-      for (const word of words) {
-        if (!word) continue;
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
 
         if (!currentLine) {
           if (measureFn(word) <= maxWidth) {
             currentLine = word;
           } else {
+            // Character-level break for words wider than entire printable width
             let piece = '';
             for (const char of word) {
               if (measureFn(piece + char) <= maxWidth) {
@@ -788,53 +733,15 @@
   }
 
   /**
-   * Resolves wrapped lines for any text element with multi-tier fallback:
-   * 1. Live DOM Range inspection (exact screen match)
-   * 2. Serialized lines from project state
-   * 3. Canvas algorithmic word-wrapping
-   * 4. Safety validation pass to strictly prevent right-edge overflow
+   * Resolves wrapped lines for any text element with strict preservation of user Enters and blank lines.
    */
   function getWrappedTextLines(ctx, el, availablePrintW) {
-    let lines = null;
+    const rawText = (el.contentNode ? el.contentNode.innerText : el.text) || (el.lines ? el.lines.join('\n') : '') || '';
+    if (!rawText) return [];
 
-    if (el.contentNode) {
-      try {
-        const domLines = extractLinesFromDom(el.contentNode);
-        if (domLines && domLines.length > 0) {
-          lines = domLines;
-        }
-      } catch (err) {
-        console.warn('DOM line extraction fallback:', err);
-      }
-    }
-
-    if ((!lines || lines.length === 0) && el.lines && Array.isArray(el.lines) && el.lines.length > 0) {
-      lines = el.lines;
-    }
-
-    const rawText = el.text || (el.contentNode ? el.contentNode.innerText : '') || '';
-    if (!lines || lines.length === 0) {
-      lines = wrapTextParagraphs(rawText, (str) => ctx.measureText(str).width, availablePrintW);
-    }
-
-    // Safety validation pass: only rewrap if a line actually overflows the physical printable paper width
-    const validated = [];
-    for (const l of lines) {
-      if (!l.trim()) {
-        validated.push('');
-        continue;
-      }
-      const tw = ctx.measureText(l).width;
-      // 8px tolerance buffer prevents spurious wraps from subpixel font rendering differences
-      if (tw <= availablePrintW + 8) {
-        validated.push(l);
-      } else {
-        const rewrapped = wrapTextParagraphs(l, (str) => ctx.measureText(str).width, availablePrintW);
-        validated.push(...rewrapped);
-      }
-    }
-
-    return validated.length > 0 ? validated : [rawText];
+    const measureFn = (str) => ctx.measureText(str).width;
+    const lines = wrapTextParagraphs(rawText, measureFn, availablePrintW);
+    return lines.length > 0 ? lines : [''];
   }
 
   // --------------------------------------------------------------------------
@@ -1471,11 +1378,10 @@
       const isText = el.type === 'text';
       const domW = el.domNode ? el.domNode.offsetWidth : el.width;
       const domH = el.domNode ? el.domNode.offsetHeight : el.height;
-      let domLines = undefined;
-      if (isText && el.contentNode) {
-        try {
-          domLines = extractLinesFromDom(el.contentNode);
-        } catch (ignored) {}
+      const textVal = isText ? (el.contentNode ? el.contentNode.innerText : el.text) : undefined;
+      let textLines = undefined;
+      if (isText && textVal) {
+        textLines = textVal.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
       }
       return {
         id: el.id,
@@ -1486,8 +1392,8 @@
         fontSize: el.fontSize,
         align: el.align,
         color: el.color,
-        text: isText ? (el.contentNode ? el.contentNode.innerText : el.text) : undefined,
-        lines: domLines || el.lines,
+        text: textVal,
+        lines: textLines || el.lines,
         width: domW,
         height: domH,
         aspectRatio: el.aspectRatio,
@@ -1840,6 +1746,7 @@
         const lines = getWrappedTextLines(ctx, el, availableThumbW);
         let maxLineWidth = 0;
         for (const l of lines) {
+          if (!l) continue;
           const tw = ctx.measureText(l).width;
           if (tw > maxLineWidth) maxLineWidth = tw;
         }
@@ -1849,7 +1756,7 @@
         const thumbBoxW = Math.min(maxLineWidth + (paddingX * 2), availableThumbW);
         const lineHeight = fontSize * 1.25;
         const totalHeight = lines.length * lineHeight;
-        const thumbBoxH = el.domNode ? (el.domNode.offsetHeight * scaleY) : (totalHeight + (paddingY * 2));
+        const thumbBoxH = totalHeight + (paddingY * 2);
 
         const cx = thumbStartX + (thumbBoxW / 2);
         const cy = (el.y * scaleY) + (thumbBoxH / 2);
@@ -2087,13 +1994,36 @@
   // Bridge Telemetry & Hardware Control Panel
   // --------------------------------------------------------------------------
   function initBridgeMonitoring() {
-    fetchBridgeStatus();
-    startBridgePolling(12000);
+    // Zero automatic background polling on load to preserve Cloudflare Worker free-tier quota.
+    // Telemetry is fetched on-demand when the user opens the Console or submits a print job.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopBridgePolling();
+      } else if (isControlPanelOpen) {
+        fetchBridgeStatus();
+        startBridgePolling(8000);
+      }
+    });
   }
 
   function startBridgePolling(ms) {
-    if (bridgePollInterval) clearInterval(bridgePollInterval);
-    bridgePollInterval = setInterval(fetchBridgeStatus, ms);
+    stopBridgePolling();
+    if (isControlPanelOpen && !document.hidden) {
+      bridgePollInterval = setInterval(() => {
+        if (isControlPanelOpen && !document.hidden) {
+          fetchBridgeStatus();
+        } else {
+          stopBridgePolling();
+        }
+      }, ms);
+    }
+  }
+
+  function stopBridgePolling() {
+    if (bridgePollInterval) {
+      clearInterval(bridgePollInterval);
+      bridgePollInterval = null;
+    }
   }
 
   async function fetchBridgeStatus() {
@@ -2191,13 +2121,13 @@
     isControlPanelOpen = true;
     if (controlPanelModal) controlPanelModal.classList.remove('hidden');
     fetchBridgeStatus();
-    startBridgePolling(3000);
+    startBridgePolling(8000);
   }
 
   function closeControlPanel() {
     isControlPanelOpen = false;
     if (controlPanelModal) controlPanelModal.classList.add('hidden');
-    startBridgePolling(12000);
+    stopBridgePolling();
   }
 
   async function sendBridgeCommand(action, params = {}) {
@@ -2561,6 +2491,7 @@
 
     let maxLineWidth = 0;
     for (const l of lines) {
+      if (!l) continue;
       const tw = ctx.measureText(l).width;
       if (tw > maxLineWidth) maxLineWidth = tw;
     }
@@ -2570,7 +2501,7 @@
     const printBoxW = Math.min(maxLineWidth + (paddingX * 2), availablePaperW);
     const lineHeight = fontSize * 1.25;
     const totalHeight = lines.length * lineHeight;
-    const printBoxH = el.height ? (el.height * scaleY) : (totalHeight + (paddingY * 2));
+    const printBoxH = totalHeight + (paddingY * 2);
 
     const cx = printStartX + (printBoxW / 2);
     const cy = (el.y * scaleY) + (printBoxH / 2);
