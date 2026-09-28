@@ -202,8 +202,15 @@
                   <span id="panelPrinterState" class="metric-val">--</span>
                 </div>
                 <div class="metric-row">
-                  <span class="metric-key">Node Address:</span>
-                  <span id="panelPrinterAddress" class="metric-val">66:32:89:D2:0A:46</span>
+                  <span class="metric-key">Power Mode:</span>
+                  <span id="panelPowerState" class="metric-val">Auto-Standby (90s idle)</span>
+                </div>
+                <div class="metric-row node-addr-row">
+                  <span class="metric-key">Target MAC:</span>
+                  <div class="node-mac-control">
+                    <input type="text" id="inputPrinterAddress" class="node-mac-input" value="66:32:89:D2:0A:46" placeholder="00:00:00:00:00:00" spellcheck="false" maxlength="20" />
+                    <button type="button" id="btnSavePrinterAddress" class="btn-node-mac-save" title="Save MAC to Desk Node">Set</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -213,16 +220,19 @@
           <div class="panel-actions-section">
             <div class="section-title">Terminal Controls</div>
             <div class="panel-action-buttons">
-              <button id="btnRemoteReconnect" class="btn-action primary" type="button">
-                <span>Reconnect Node</span>
+              <button id="btnRemoteReconnect" class="btn-action primary" type="button" title="Wake desk printer and establish link">
+                <span>Wake &amp; Link</span>
               </button>
-              <button id="btnRemoteDisconnect" class="btn-action" type="button">
-                <span>Disconnect Node</span>
+              <button id="btnRemoteDisconnect" class="btn-action" type="button" title="Disconnect and put printer into low-power standby">
+                <span>Put In Standby</span>
               </button>
-              <button id="btnRemotePrintTest" class="btn-action" type="button">
-                <span>Transmit Calibration Card</span>
+              <button id="btnRemotePrintTest" class="btn-action" type="button" title="Print a hardware test/calibration label">
+                <span>Transmit Calibration</span>
               </button>
-              <button id="btnRefreshBridgeStatus" class="btn-action secondary" type="button">
+              <button id="btnRemoteFetchQueue" class="btn-action" type="button" title="Force check and print any pending quotes in cloud">
+                <span>Flush Pending Queue</span>
+              </button>
+              <button id="btnRefreshBridgeStatus" class="btn-action secondary" type="button" title="Sync real-time telemetry from node">
                 <span>Sync Telemetry</span>
               </button>
             </div>

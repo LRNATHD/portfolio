@@ -104,9 +104,13 @@
   const panelPrinterBadge = document.getElementById('panelPrinterBadge');
   const panelPrinterState = document.getElementById('panelPrinterState');
   const panelPrinterAddress = document.getElementById('panelPrinterAddress');
+  const inputPrinterAddress = document.getElementById('inputPrinterAddress');
+  const btnSavePrinterAddress = document.getElementById('btnSavePrinterAddress');
+  const panelPowerState = document.getElementById('panelPowerState');
   const btnRemoteReconnect = document.getElementById('btnRemoteReconnect');
   const btnRemoteDisconnect = document.getElementById('btnRemoteDisconnect');
   const btnRemotePrintTest = document.getElementById('btnRemotePrintTest');
+  const btnRemoteFetchQueue = document.getElementById('btnRemoteFetchQueue');
   const btnRefreshBridgeStatus = document.getElementById('btnRefreshBridgeStatus');
   const panelLogBox = document.getElementById('panelLogBox');
   const panelLogTime = document.getElementById('panelLogTime');
@@ -410,9 +414,25 @@
         sendBridgeCommand('print_test');
       });
     }
+    if (btnRemoteFetchQueue) {
+      btnRemoteFetchQueue.addEventListener('click', () => {
+        sendBridgeCommand('fetch_queue');
+      });
+    }
     if (btnRefreshBridgeStatus) {
       btnRefreshBridgeStatus.addEventListener('click', () => {
         fetchBridgeStatus();
+      });
+    }
+    if (btnSavePrinterAddress && inputPrinterAddress) {
+      btnSavePrinterAddress.addEventListener('click', () => {
+        const newAddr = inputPrinterAddress.value.trim().toUpperCase();
+        if (!newAddr) {
+          appendPanelLog('Error: Target MAC address cannot be blank', 'error');
+          return;
+        }
+        appendPanelLog(`Updating target MAC address to ${newAddr}...`, 'info');
+        sendBridgeCommand('set_printer_address', { address: newAddr });
       });
     }
 
@@ -2097,6 +2117,9 @@
         if (currentBridgeStatus.printerConnected) {
           panelPrinterBadge.className = 'tile-status-badge badge-connected';
           panelPrinterBadge.textContent = 'Connected';
+        } else if (currentBridgeStatus.printerState === 'STANDBY') {
+          panelPrinterBadge.className = 'tile-status-badge badge-standby';
+          panelPrinterBadge.textContent = 'Standby (Auto-Wake)';
         } else if (currentBridgeStatus.printerState === 'CONNECTING') {
           panelPrinterBadge.className = 'tile-status-badge badge-warning';
           panelPrinterBadge.textContent = 'Connecting';
@@ -2106,10 +2129,23 @@
         }
       }
       if (panelPrinterState) {
-        panelPrinterState.textContent = currentBridgeStatus.printerState || '--';
+        if (currentBridgeStatus.printerConnected) {
+          panelPrinterState.textContent = 'Active (Printing Link Live)';
+        } else if (currentBridgeStatus.printerState === 'STANDBY') {
+          panelPrinterState.textContent = 'Standby (Auto-Connect On-Demand)';
+        } else {
+          panelPrinterState.textContent = currentBridgeStatus.printerState || '--';
+        }
+      }
+      if (panelPowerState) {
+        panelPowerState.textContent = 'Auto-Standby (90s idle)';
+      }
+      const activeMac = currentBridgeStatus.printerAddress || currentBridgeStatus.deviceAddress || '66:32:89:D2:0A:46';
+      if (inputPrinterAddress && document.activeElement !== inputPrinterAddress) {
+        inputPrinterAddress.value = activeMac;
       }
       if (panelPrinterAddress) {
-        panelPrinterAddress.textContent = currentBridgeStatus.deviceAddress || '66:32:89:D2:0A:46';
+        panelPrinterAddress.textContent = activeMac;
       }
       if (panelLogTime) {
         panelLogTime.textContent = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -2234,27 +2270,18 @@
         await fetchBridgeStatus();
       }
 
-      // Case A: Phone is completely offline
+      // If phone uplink is completely offline, offer cloud queuing
       if (!currentBridgeStatus.phoneOnline) {
-        showModal('Uplink Relay Offline', 'The mobile uplink is not connected to the cloud server.', 15, 'Queue');
+        showModal('Uplink Relay Offline', 'The mobile uplink is not currently connected to the cloud server.', 15, 'Queue');
         showModalAlert(
           'Uplink Relay Offline',
-          'The mobile uplink is not reporting telemetry. Ensure the RealTalk relay app is running on the mobile device.',
+          'The mobile uplink has not reported telemetry recently. You can queue your transmission now, and it will materialize automatically as soon as the desk node connects.',
           false
         );
         return;
       }
-
-      // Case B: Phone is online, but Bluetooth printer is disconnected
-      if (!currentBridgeStatus.printerConnected) {
-        showModal('Desk Node Standing By', 'Mobile uplink is online, but desk physical node is standing by.', 15, 'Bridge');
-        showModalAlert(
-          'Desk Node Standing By',
-          'Mobile uplink is online, but connection to desk physical node is disconnected. Reconnect now to materialize.',
-          true
-        );
-        return;
-      }
+      // Note: If printer is in Standby / Disconnected, we do NOT block!
+      // The bridge service automatically auto-connects to the desk node on demand.
     }
 
     executePrintJob();
@@ -2311,7 +2338,10 @@
       modalJobId.textContent = `Job ID: ${result.id.slice(0, 8)}`;
 
       // Poll for physical print confirmation
-      updateModal('Relaying to Desk Node...', 'Mobile uplink received payload & is transmitting to desk node...', 75, false, 'Bridge');
+      const relayDesc = currentBridgeStatus.printerConnected
+        ? 'Mobile uplink received payload & transmitting to desk node...'
+        : 'Mobile uplink received payload & auto-waking desk node...';
+      updateModal('Relaying to Desk Node...', relayDesc, 75, false, 'Bridge');
       pollPrintStatus(result.id);
 
     } catch (err) {
@@ -2339,21 +2369,12 @@
         showModal('Uplink Relay Offline', 'The mobile uplink is not connected to the cloud server.', 15, 'Queue');
         showModalAlert(
           'Uplink Relay Offline',
-          'The mobile uplink is not reporting telemetry. Ensure the RealTalk relay app is running on the mobile device.',
+          'The mobile uplink has not reported telemetry recently. You can queue your transmission now, and it will materialize automatically as soon as the desk node connects.',
           false
         );
         return;
       }
-
-      if (!currentBridgeStatus.printerConnected) {
-        showModal('Desk Node Standing By', 'Mobile uplink is online, but desk physical node is standing by.', 15, 'Bridge');
-        showModalAlert(
-          'Desk Node Standing By',
-          'Mobile uplink is online, but connection to desk physical node is disconnected. Reconnect now to materialize.',
-          true
-        );
-        return;
-      }
+      // Note: If printer is in Standby, we do NOT block! The bridge connects automatically.
     }
 
     executeBatchPrintJob();
