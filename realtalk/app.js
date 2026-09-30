@@ -2264,26 +2264,7 @@
     // Auto-save snapshot into history on physical print
     saveSnapshotToHistory('Materialized Card');
 
-    // 1. Check bridge status before dispatching to hardware
-    if (!bypassBridgeCheck) {
-      if (Date.now() - currentBridgeStatus.lastUpdated > 6000) {
-        await fetchBridgeStatus();
-      }
-
-      // If phone uplink is completely offline, offer cloud queuing
-      if (!currentBridgeStatus.phoneOnline) {
-        showModal('Uplink Relay Offline', 'The mobile uplink is not currently connected to the cloud server.', 15, 'Queue');
-        showModalAlert(
-          'Uplink Relay Offline',
-          'The mobile uplink has not reported telemetry recently. You can queue your transmission now, and it will materialize automatically as soon as the desk node connects.',
-          false
-        );
-        return;
-      }
-      // Note: If printer is in Standby / Disconnected, we do NOT block!
-      // The bridge service automatically auto-connects to the desk node on demand.
-    }
-
+    // Immediate dispatch without blocking pre-flight checks
     executePrintJob();
   }
 
@@ -2360,23 +2341,7 @@
 
     if (project.stickers.length === 0) return;
 
-    if (!bypassBridgeCheck) {
-      if (Date.now() - currentBridgeStatus.lastUpdated > 6000) {
-        await fetchBridgeStatus();
-      }
-
-      if (!currentBridgeStatus.phoneOnline) {
-        showModal('Uplink Relay Offline', 'The mobile uplink is not connected to the cloud server.', 15, 'Queue');
-        showModalAlert(
-          'Uplink Relay Offline',
-          'The mobile uplink has not reported telemetry recently. You can queue your transmission now, and it will materialize automatically as soon as the desk node connects.',
-          false
-        );
-        return;
-      }
-      // Note: If printer is in Standby, we do NOT block! The bridge connects automatically.
-    }
-
+    // Immediate dispatch without blocking pre-flight checks
     executeBatchPrintJob();
   }
 
@@ -2394,11 +2359,11 @@
       const density = parseInt(selectPrintDensity?.value || localStorage.getItem('realtalk_print_density') || '12', 10);
       const invert = (selectPrintPolarity?.value || localStorage.getItem('realtalk_print_polarity') || 'standard') === 'inverted';
 
-      let lastJobId = null;
+      const quotesPayload = [];
 
       for (let i = 0; i < total; i++) {
         const sticker = project.stickers[i];
-        const stepPct = Math.round(20 + ((i / total) * 55));
+        const stepPct = Math.round(15 + ((i / total) * 55));
         updateModal(
           `Synthesizing Card ${i + 1} of ${total}`,
           `Compositing monochrome dot matrix (800x1200) for card ${i + 1}...`,
@@ -2415,34 +2380,44 @@
           .filter(t => t.length > 0)
           .join(' | ') || `Card ${i + 1} of ${total}`;
 
-        const response = await fetch(`${WORKER_BASE_URL}/api/quote`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'canvas',
-            imageData: pngDataUrl,
-            text: textSummary,
-            author: `Card ${i + 1}/${total}`,
-            speed,
-            density,
-            invert
-          })
+        quotesPayload.push({
+          type: 'canvas',
+          imageData: pngDataUrl,
+          text: textSummary,
+          author: `Card ${i + 1}/${total}`,
+          speed,
+          density,
+          invert
         });
-
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          throw new Error(err.error || `Server error ${response.status}`);
-        }
-
-        const result = await response.json();
-        lastJobId = result.id;
-        modalJobId.textContent = `Job ID: ${result.id.slice(0, 8)} (${i + 1}/${total})`;
       }
+
+      updateModal(
+        'Queueing Batch Transmission...',
+        `Streaming ${total} cards to cloud pipeline in a single batch...`,
+        75,
+        false,
+        'Queue'
+      );
+
+      const response = await fetch(`${WORKER_BASE_URL}/api/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotes: quotesPayload })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${response.status}`);
+      }
+
+      const result = await response.json();
+      const lastJobId = result.id || (result.ids && result.ids[result.ids.length - 1]);
+      modalJobId.textContent = `Batch (${total} cards): ID ${lastJobId ? lastJobId.slice(0, 8) : 'ok'}`;
 
       updateModal(
         'Materializing Card Sequence...',
         `All ${total} cards queued. Desk node is materializing sequentially...`,
-        80,
+        85,
         false,
         'Bridge'
       );
@@ -2450,7 +2425,7 @@
       if (lastJobId) {
         pollPrintStatus(lastJobId);
       } else {
-        updateModal('Manifestation Complete', `All ${total} cards dispatched to desk node!`, 100);
+        updateModal('Manifestation Complete', `All ${total} cards dispatched to desk node!`, 100, true, 'Print');
         isSubmitting = false;
         btnPrint.disabled = false;
         if (btnPrintAll) btnPrintAll.disabled = false;
@@ -2594,7 +2569,7 @@
 
   function pollPrintStatus(quoteId) {
     let checks = 0;
-    const maxChecks = 35;
+    const maxChecks = 16;
 
     const interval = setInterval(async () => {
       checks++;
@@ -2620,7 +2595,7 @@
         btnPrint.disabled = false;
         if (btnPrintAll) btnPrintAll.disabled = false;
       }
-    }, 2000);
+    }, 1500);
   }
 
   function showModal(title, desc, progress, stage = 'Render') {
