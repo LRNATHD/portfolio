@@ -120,14 +120,36 @@
   const selectPrintDensity = document.getElementById('selectPrintDensity');
   const selectPrintPolarity = document.getElementById('selectPrintPolarity');
 
-  // History Sidebar DOM
+  // History & Layers Studio Sidebar DOM
   const historySidebar = document.getElementById('historySidebar');
   const historyContainer = document.getElementById('historyContainer');
   const historyBadge = document.getElementById('historyBadge');
   const btnToggleHistory = document.getElementById('btnToggleHistory');
+  const btnToggleLayers = document.getElementById('btnToggleLayers');
+  const layersBadge = document.getElementById('layersBadge');
+  const tabLayers = document.getElementById('tabLayers');
+  const tabHistory = document.getElementById('tabHistory');
+  const tabLayersCount = document.getElementById('tabLayersCount');
+  const tabHistoryCount = document.getElementById('tabHistoryCount');
+  const layersPanelView = document.getElementById('layersPanelView');
+  const historyPanelView = document.getElementById('historyPanelView');
+  const layersContainer = document.getElementById('layersContainer');
+  const btnLayerTop = document.getElementById('btnLayerTop');
+  const btnLayerUp = document.getElementById('btnLayerUp');
+  const btnLayerDown = document.getElementById('btnLayerDown');
+  const btnLayerBottom = document.getElementById('btnLayerBottom');
+  const btnLayerDuplicate = document.getElementById('btnLayerDuplicate');
+  const btnLayerDelete = document.getElementById('btnLayerDelete');
+  const btnLayerAddText = document.getElementById('btnLayerAddText');
+  const btnLayerAddImage = document.getElementById('btnLayerAddImage');
   const btnSidebarClose = document.getElementById('btnSidebarClose');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');
   const btnNewCanvasSidebar = document.getElementById('btnNewCanvasSidebar');
+
+  // Sidebar & Layer State
+  let activeSidebarTab = 'layers'; // 'layers' or 'history'
+  let draggedLayerId = null;
+  let liveReditherRaf = null;
 
   // Floating Controls
   const elementControls = document.getElementById('elementControls');
@@ -263,10 +285,49 @@
       });
     }
 
-    // Toggle History Drawer / Sidebar
+    // Toggle Studio Sidebar & Tab Switching
     if (btnToggleHistory) {
       btnToggleHistory.addEventListener('click', () => {
-        toggleHistorySidebar();
+        toggleSidebar('history');
+      });
+    }
+
+    if (btnToggleLayers) {
+      btnToggleLayers.addEventListener('click', () => {
+        toggleSidebar('layers');
+      });
+    }
+
+    if (tabLayers) {
+      tabLayers.addEventListener('click', () => {
+        switchSidebarTab('layers');
+      });
+    }
+
+    if (tabHistory) {
+      tabHistory.addEventListener('click', () => {
+        switchSidebarTab('history');
+      });
+    }
+
+    // Inkscape Action Toolbar buttons
+    if (btnLayerTop) btnLayerTop.addEventListener('click', () => moveSelectedLayerToTop());
+    if (btnLayerUp) btnLayerUp.addEventListener('click', () => moveSelectedLayerUp());
+    if (btnLayerDown) btnLayerDown.addEventListener('click', () => moveSelectedLayerDown());
+    if (btnLayerBottom) btnLayerBottom.addEventListener('click', () => moveSelectedLayerToBottom());
+    if (btnLayerDuplicate) btnLayerDuplicate.addEventListener('click', () => duplicateSelectedLayer());
+    if (btnLayerDelete) btnLayerDelete.addEventListener('click', () => deleteSelectedElement());
+
+    if (btnLayerAddText) {
+      btnLayerAddText.addEventListener('click', () => {
+        addTextElement('Your text...', 50, 100, 24, 'center', 0);
+        triggerAutoSave();
+      });
+    }
+
+    if (btnLayerAddImage) {
+      btnLayerAddImage.addEventListener('click', () => {
+        if (imageInput) imageInput.click();
       });
     }
 
@@ -492,17 +553,17 @@
     }
   }
 
-  // Global Keyboard Listener (Backspace & Delete keys)
+  // Global Keyboard Listener (Inkscape shortcuts: Delete, Reorder, Duplicate, Esc)
   function setupKeyboardListener() {
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        const activeEl = document.activeElement;
-        const isInput = activeEl && (
-          activeEl.tagName === 'INPUT' ||
-          activeEl.tagName === 'TEXTAREA' ||
-          activeEl.isContentEditable
-        );
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.isContentEditable
+      );
 
+      if (e.key === 'Backspace' || e.key === 'Delete') {
         if (isInput) {
           // If editing a text element and it's empty, backspace removes the element cleanly
           if (activeEl.isContentEditable && selectedElement && selectedElement.contentNode === activeEl) {
@@ -520,6 +581,47 @@
           e.preventDefault();
           deleteSelectedElement();
         }
+        return;
+      }
+
+      // Escape key deselects element
+      if (e.key === 'Escape') {
+        deselectAll();
+        return;
+      }
+
+      // Don't intercept shortcuts when user is typing in an input
+      if (isInput) return;
+
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+
+      // Duplicate: Ctrl+D
+      if (isCmdOrCtrl && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        duplicateSelectedLayer();
+        return;
+      }
+
+      // Raise Layer: Ctrl+] (or Bring to Front: Shift+Ctrl+])
+      if (isCmdOrCtrl && e.key === ']') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          moveSelectedLayerToTop();
+        } else {
+          moveSelectedLayerUp();
+        }
+        return;
+      }
+
+      // Lower Layer: Ctrl+[ (or Send to Back: Shift+Ctrl+[)
+      if (isCmdOrCtrl && e.key === '[') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          moveSelectedLayerToBottom();
+        } else {
+          moveSelectedLayerDown();
+        }
+        return;
       }
     });
   }
@@ -576,64 +678,95 @@
   }
 
   // --------------------------------------------------------------------------
-  // Image Processing & Floyd-Steinberg Dithering (1:1 Printhead Micro-Dots)
+  // Image Processing & Floyd-Steinberg Dynamic Redithering System
   // --------------------------------------------------------------------------
+
+  function loadImagePromise(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load image source'));
+      img.src = src;
+    });
+  }
+
   function processUploadedFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
+      const dataUri = e.target.result;
       const img = new Image();
       img.onload = () => {
-        const ditheredDataUrl = convertImageToDithered(img, isPhotoDither);
-        addImageElement(ditheredDataUrl, img.width, img.height, 0);
+        // High-resolution source preservation:
+        // Cap max dimension to 1600px to prevent localStorage exhaustion while
+        // comfortably supersampling the physical 800x1200 printhead.
+        let rawSrc = dataUri;
+        const maxRaw = 1600;
+        let origW = img.naturalWidth || img.width;
+        let origH = img.naturalHeight || img.height;
+        if (origW > maxRaw || origH > maxRaw) {
+          const ratio = Math.min(maxRaw / origW, maxRaw / origH);
+          const rw = Math.round(origW * ratio);
+          const rh = Math.round(origH * ratio);
+          const normCanvas = document.createElement('canvas');
+          normCanvas.width = rw;
+          normCanvas.height = rh;
+          const normCtx = normCanvas.getContext('2d');
+          normCtx.imageSmoothingEnabled = true;
+          normCtx.imageSmoothingQuality = 'high';
+          normCtx.drawImage(img, 0, 0, rw, rh);
+          rawSrc = normCanvas.toDataURL('image/jpeg', 0.92);
+          origW = rw;
+          origH = rh;
+        }
+
+        addImageElement(null, origW, origH, 0, null, null, null, null, rawSrc, false);
         triggerAutoSave();
       };
-      img.src = e.target.result;
+      img.src = dataUri;
     };
     reader.readAsDataURL(file);
   }
 
   /**
-   * Converts an image to 1-bit monochrome using Floyd-Steinberg error diffusion.
-   * Dithers at 400px max dimension matching display resolution and producing punchy
-   * 2x2 dot clusters that heat thermal paper effectively without washing out.
+   * Generates a 1-bit monochrome canvas using Floyd-Steinberg error diffusion
+   * or high-contrast threshold directly at the specified dot dimensions (targetW, targetH).
    */
-  function convertImageToDithered(img, useDither = true) {
-    // Determine max dimension for canvas (max 400px wide/high)
-    const maxDim = 400;
-    let w = img.width;
-    let h = img.height;
-    if (w > maxDim || h > maxDim) {
-      if (w > h) {
-        h = Math.round((h * maxDim) / w);
-        w = maxDim;
-      } else {
-        w = Math.round((w * maxDim) / h);
-        h = maxDim;
-      }
-    }
+  function generateDitheredBitmap(sourceImg, targetW, targetH, options = {}) {
+    const w = Math.max(1, Math.round(targetW));
+    const h = Math.max(1, Math.round(targetH));
+    const useDither = options.useDither !== undefined ? options.useDither : isPhotoDither;
+    const isInverted = !!options.isInverted;
 
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
     const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sourceImg, 0, 0, w, h);
 
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
-
     const gray = new Float32Array(w * h);
+
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
       const a = data[i + 3];
 
-      // Alpha check: transparent pixels become white paper (255)
+      let lum;
       if (a < 64) {
-        gray[i / 4] = 255;
+        // Transparent pixels become white substrate
+        lum = 255;
       } else {
-        gray[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+        lum = 0.299 * r + 0.587 * g + 0.114 * b;
       }
+
+      if (isInverted) {
+        lum = 255 - lum;
+      }
+      gray[i / 4] = lum;
     }
 
     if (useDither) {
@@ -670,6 +803,74 @@
     }
 
     ctx.putImageData(imgData, 0, 0);
+    return c;
+  }
+
+  /**
+   * Recalculates the dithering of an image element at its CURRENT display dimensions
+   * from rawSrc so that scaling up does NOT enlarge dots into chunky square blocks,
+   * but recalculates micro-dots to preserve maximum photographic detail.
+   */
+  function recalculateImageDithering(record) {
+    if (!record || record.type !== 'image') return;
+    const src = record.rawSrc || record.dataUrl;
+    if (!src) return;
+
+    // Retina supersampling: if devicePixelRatio >= 2, render at 2x dot density for high-DPI screens
+    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    const targetW = Math.max(16, Math.round(record.width * dpr));
+    const targetH = Math.max(16, Math.round(record.height * dpr));
+
+    const applyDither = (sourceImg) => {
+      const ditherCanvas = generateDitheredBitmap(sourceImg, targetW, targetH, {
+        useDither: isPhotoDither,
+        isInverted: !!record.isInverted
+      });
+      const dataUrl = ditherCanvas.toDataURL('image/png');
+      record.dataUrl = dataUrl;
+      if (record.imgNode) {
+        record.imgNode.src = dataUrl;
+      }
+    };
+
+    if (record.rawImg && record.rawImg.complete && record.rawImg.naturalWidth > 0) {
+      applyDither(record.rawImg);
+    } else {
+      const img = new Image();
+      img.onload = () => {
+        record.rawImg = img;
+        applyDither(img);
+      };
+      img.src = src;
+    }
+  }
+
+  /**
+   * Throttles dynamic redithering during live drag-resize via requestAnimationFrame
+   * to guarantee smooth 60fps handles while dynamically updating dither dots.
+   */
+  function scheduleLiveRedither(record) {
+    if (liveReditherRaf) return;
+    liveReditherRaf = requestAnimationFrame(() => {
+      liveReditherRaf = null;
+      recalculateImageDithering(record);
+    });
+  }
+
+  function convertImageToDithered(img, useDither = true, isInverted = false) {
+    const maxDim = 400;
+    let w = img.width;
+    let h = img.height;
+    if (w > maxDim || h > maxDim) {
+      if (w > h) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
+      } else {
+        w = Math.round((w * maxDim) / h);
+        h = maxDim;
+      }
+    }
+    const c = generateDitheredBitmap(img, w, h, { useDither, isInverted });
     return c.toDataURL('image/png');
   }
 
@@ -767,7 +968,7 @@
   // --------------------------------------------------------------------------
   // Text Element Management
   // --------------------------------------------------------------------------
-  function addTextElement(text, x, y, fontSize = 24, align = 'center', rotation = 0, color = null) {
+  function addTextElement(text, x, y, fontSize = 24, align = 'center', rotation = 0, color = null, name = null, locked = false, hidden = false) {
     const id = 'el_' + nextElementId++;
     const el = document.createElement('div');
     el.className = 'canvas-element';
@@ -775,6 +976,8 @@
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
     el.style.transform = `rotate(${rotation || 0}deg)`;
+    if (hidden) el.style.display = 'none';
+    if (locked) el.classList.add('element-locked');
 
     const textColor = color || (isBlackBg ? '#ffffff' : '#000000');
 
@@ -802,6 +1005,7 @@
 
     const record = {
       id,
+      name: name || ('Text: ' + (text ? text.replace(/[\r\n\s]+/g, ' ').trim().slice(0, 16) : 'Text')),
       type: 'text',
       x,
       y,
@@ -809,19 +1013,25 @@
       align,
       rotation: rotation || 0,
       color: textColor,
+      locked: !!locked,
+      hidden: !!hidden,
       domNode: el,
       contentNode: content
     };
     elements.push(record);
+    syncDOMZIndex();
 
     attachDragListeners(el, record);
     attachRotateListener(rotateHandle, record);
 
     content.addEventListener('input', () => {
+      record.text = content.innerText;
+      renderLayersPanel();
       triggerAutoSave();
     });
 
     selectElement(record);
+    renderLayersPanel();
     content.focus();
     return record;
   }
@@ -829,7 +1039,7 @@
   // --------------------------------------------------------------------------
   // Image Element Management
   // --------------------------------------------------------------------------
-  function addImageElement(dataUrl, origW, origH, rotation = 0, initialW = null, initialH = null, xPos = null, yPos = null) {
+  function addImageElement(dataUrl, origW, origH, rotation = 0, initialW = null, initialH = null, xPos = null, yPos = null, rawSrc = null, isInverted = false, name = null, locked = false, hidden = false) {
     const id = 'el_' + nextElementId++;
     const el = document.createElement('div');
     el.className = 'canvas-element';
@@ -840,8 +1050,8 @@
     let h = initialH;
     if (!w || !h) {
       const maxInitW = 220;
-      w = origW;
-      h = origH;
+      w = origW || 200;
+      h = origH || 200;
       if (w > maxInitW) {
         h = Math.round((h * maxInitW) / w);
         w = maxInitW;
@@ -856,10 +1066,11 @@
     el.style.width = `${w}px`;
     el.style.height = `${h}px`;
     el.style.transform = `rotate(${rotation || 0}deg)`;
+    if (hidden) el.style.display = 'none';
+    if (locked) el.classList.add('element-locked');
 
     const img = document.createElement('img');
     img.className = 'canvas-img-content';
-    img.src = dataUrl;
 
     // 4 Corner Resize Handles
     const handleBR = document.createElement('div');
@@ -896,18 +1107,40 @@
 
     const record = {
       id,
+      name: name || (`Image ${elements.filter(e => e.type === 'image').length + 1}`),
       type: 'image',
       x,
       y,
       width: w,
       height: h,
-      aspectRatio: origW / origH,
+      origW: origW || w,
+      origH: origH || h,
+      aspectRatio: (origW && origH) ? (origW / origH) : (w / h),
       rotation: rotation || 0,
-      dataUrl,
+      dataUrl: dataUrl || '',
+      rawSrc: rawSrc || dataUrl || '',
+      isInverted: !!isInverted,
+      locked: !!locked,
+      hidden: !!hidden,
       domNode: el,
-      imgNode: img
+      imgNode: img,
+      rawImg: null
     };
+
+    if (record.rawSrc) {
+      const rawImage = new Image();
+      rawImage.onload = () => {
+        record.rawImg = rawImage;
+        recalculateImageDithering(record);
+        renderLayersPanel();
+      };
+      rawImage.src = record.rawSrc;
+    } else if (dataUrl) {
+      img.src = dataUrl;
+    }
+
     elements.push(record);
+    syncDOMZIndex();
 
     attachDragListeners(el, record);
     attachResizeListener(handleBR, record, 'br');
@@ -924,6 +1157,7 @@
     let touchInitY = 0;
 
     el.addEventListener('touchstart', (e) => {
+      if (record.locked) return;
       if (e.touches.length === 2) {
         selectElement(record);
         const t1 = e.touches[0];
@@ -937,6 +1171,7 @@
     }, { passive: true });
 
     el.addEventListener('touchmove', (e) => {
+      if (record.locked) return;
       if (e.touches.length === 2 && touchStartDist > 0) {
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -955,19 +1190,22 @@
         el.style.height = `${newH}px`;
         el.style.left = `${newX}px`;
         el.style.top = `${newY}px`;
+        scheduleLiveRedither(record);
       }
     }, { passive: true });
 
     el.addEventListener('touchend', (e) => {
       if (touchStartDist > 0) {
         touchStartDist = 0;
+        recalculateImageDithering(record);
+        renderLayersPanel();
         triggerAutoSave();
       }
     });
 
     // Desktop wheel/trackpad zoom when image is selected
     el.addEventListener('wheel', (e) => {
-      if (selectedElement === record) {
+      if (selectedElement === record && !record.locked) {
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.08 : 0.92;
         const newW = Math.max(30, Math.min(2400, Math.round(record.width * factor)));
@@ -982,11 +1220,14 @@
         record.domNode.style.height = `${newH}px`;
         record.domNode.style.left = `${record.x}px`;
         record.domNode.style.top = `${record.y}px`;
+        recalculateImageDithering(record);
+        renderLayersPanel();
         triggerAutoSave();
       }
     }, { passive: false });
 
     selectElement(record);
+    renderLayersPanel();
     return record;
   }
 
@@ -1001,6 +1242,7 @@
     let initTop = 0;
 
     node.addEventListener('pointerdown', (e) => {
+      if (record.locked) return;
       // If clicking handles, ignore element drag
       if (e.target.classList.contains('resize-handle') || e.target.classList.contains('rotate-handle')) return;
 
@@ -1047,6 +1289,7 @@
         try {
           node.releasePointerCapture(e.pointerId);
         } catch (ignored) {}
+        renderLayersPanel();
         triggerAutoSave();
       }
     };
@@ -1071,6 +1314,7 @@
     let initialDist = 0;
 
     handle.addEventListener('pointerdown', (e) => {
+      if (record.locked) return;
       isResizing = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -1145,6 +1389,9 @@
       record.domNode.style.height = `${newH}px`;
       record.domNode.style.left = `${newX}px`;
       record.domNode.style.top = `${newY}px`;
+      if (record.type === 'image') {
+        scheduleLiveRedither(record);
+      }
     });
 
     const stopResize = (e) => {
@@ -1153,6 +1400,10 @@
         try {
           handle.releasePointerCapture(e.pointerId);
         } catch (ignored) {}
+        if (record.type === 'image') {
+          recalculateImageDithering(record);
+        }
+        renderLayersPanel();
         triggerAutoSave();
       }
     };
@@ -1172,6 +1423,7 @@
     let initialRotation = 0;
 
     handle.addEventListener('pointerdown', (e) => {
+      if (record.locked) return;
       isRotating = true;
       const rect = record.domNode.getBoundingClientRect();
       centerScreenX = rect.left + rect.width / 2;
@@ -1209,6 +1461,7 @@
         try {
           handle.releasePointerCapture(e.pointerId);
         } catch (ignored) {}
+        renderLayersPanel();
         triggerAutoSave();
       }
     };
@@ -1225,12 +1478,14 @@
     selectedElement = record;
     record.domNode.classList.add('selected');
     showInspector(record);
+    highlightLayerInPanel(record.id);
   }
 
   function deselectAll() {
     elements.forEach(r => r.domNode.classList.remove('selected'));
     selectedElement = null;
     hideInspector();
+    clearLayerHighlightInPanel();
   }
 
   function showInspector(record) {
@@ -1289,6 +1544,8 @@
       selectedElement.domNode.style.height = `${newH}px`;
       selectedElement.domNode.style.left = `${selectedElement.x}px`;
       selectedElement.domNode.style.top = `${selectedElement.y}px`;
+      recalculateImageDithering(selectedElement);
+      renderLayersPanel();
     }
     triggerAutoSave();
   }
@@ -1300,6 +1557,7 @@
     selectedElement.rotation = Math.round(angle);
     selectedElement.domNode.style.transform = `rotate(${selectedElement.rotation}deg)`;
     updateInspectorRotateBadge(selectedElement.rotation);
+    renderLayersPanel();
     triggerAutoSave();
   }
 
@@ -1312,9 +1570,12 @@
 
   function deleteSelectedElement() {
     if (!selectedElement) return;
+    const delId = selectedElement.id;
     selectedElement.domNode.remove();
-    elements = elements.filter(r => r.id !== selectedElement.id);
+    elements = elements.filter(r => r.id !== delId);
     deselectAll();
+    syncDOMZIndex();
+    renderLayersPanel();
     triggerAutoSave();
   }
 
@@ -1336,30 +1597,10 @@
 
   function invertSelectedImage() {
     if (!selectedElement || selectedElement.type !== 'image') return;
-    const record = selectedElement;
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth || img.width;
-      c.height = img.naturalHeight || img.height;
-      const ctx = c.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-
-      const imgData = ctx.getImageData(0, 0, c.width, c.height);
-      const d = imgData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        d[i] = 255 - d[i];
-        d[i + 1] = 255 - d[i + 1];
-        d[i + 2] = 255 - d[i + 2];
-        d[i + 3] = 255;
-      }
-      ctx.putImageData(imgData, 0, 0);
-      const invertedDataUrl = c.toDataURL('image/png');
-      record.dataUrl = invertedDataUrl;
-      record.imgNode.src = invertedDataUrl;
-      triggerAutoSave();
-    };
-    img.src = record.dataUrl;
+    selectedElement.isInverted = !selectedElement.isInverted;
+    recalculateImageDithering(selectedElement);
+    renderLayersPanel();
+    triggerAutoSave();
   }
 
   function setStageBgColor(black) {
@@ -1405,6 +1646,7 @@
       }
       return {
         id: el.id,
+        name: el.name,
         type: el.type,
         x: el.x,
         y: el.y,
@@ -1416,8 +1658,15 @@
         lines: textLines || el.lines,
         width: domW,
         height: domH,
+        origW: el.origW || domW,
+        origH: el.origH || domH,
         aspectRatio: el.aspectRatio,
-        dataUrl: el.dataUrl
+        dataUrl: el.dataUrl,
+        rawSrc: el.rawSrc,
+        isInverted: !!el.isInverted,
+        locked: !!el.locked,
+        hidden: !!el.hidden,
+        zIndex: el.zIndex
       };
     });
   }
@@ -1622,6 +1871,7 @@
         previewLayer.style.pointerEvents = 'none';
 
         for (const item of (sticker.elements || [])) {
+          if (item.hidden) continue;
           if (item.type === 'text') {
             const textWrap = document.createElement('div');
             textWrap.className = 'canvas-element';
@@ -1688,12 +1938,419 @@
 
     for (const item of (state.elements || [])) {
       if (item.type === 'text') {
-        addTextElement(item.text || '', item.x, item.y, item.fontSize || 24, item.align || 'center', item.rotation || 0, item.color);
-      } else if (item.type === 'image' && item.dataUrl) {
-        addImageElement(item.dataUrl, item.width || 200, item.height || 200, item.rotation || 0, item.width, item.height, item.x, item.y);
+        addTextElement(item.text || '', item.x, item.y, item.fontSize || 24, item.align || 'center', item.rotation || 0, item.color, item.name, item.locked, item.hidden);
+      } else if (item.type === 'image' && (item.rawSrc || item.dataUrl)) {
+        addImageElement(item.dataUrl, item.origW || item.width || 200, item.origH || item.height || 200, item.rotation || 0, item.width, item.height, item.x, item.y, item.rawSrc, item.isInverted, item.name, item.locked, item.hidden);
       }
     }
     deselectAll();
+    syncDOMZIndex();
+    renderLayersPanel();
+  }
+
+  // --------------------------------------------------------------------------
+  // Inkscape Layers & Objects System
+  // --------------------------------------------------------------------------
+
+  function getDefaultLayerName(item) {
+    if (item.name) return item.name;
+    if (item.type === 'text') {
+      const txt = item.text || (item.contentNode ? item.contentNode.innerText : '');
+      const clean = txt.replace(/[\r\n\s]+/g, ' ').trim();
+      return clean.length > 0 ? `Text: "${clean.slice(0, 16)}${clean.length > 16 ? '...' : ''}"` : 'Text Box';
+    } else if (item.type === 'image') {
+      return `Image (${Math.round(item.width)}×${Math.round(item.height)})`;
+    }
+    return 'Layer ' + item.id;
+  }
+
+  function syncDOMZIndex() {
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      el.zIndex = i + 1;
+      if (el.domNode) {
+        el.domNode.style.zIndex = i + 1;
+        elementsContainer.appendChild(el.domNode);
+      }
+    }
+  }
+
+  function highlightLayerInPanel(id) {
+    if (!layersContainer) return;
+    layersContainer.querySelectorAll('.layer-item').forEach(row => {
+      if (row.dataset.id === id) {
+        row.classList.add('active-layer');
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        row.classList.remove('active-layer');
+      }
+    });
+    if (btnLayerTop) btnLayerTop.disabled = false;
+    if (btnLayerUp) btnLayerUp.disabled = false;
+    if (btnLayerDown) btnLayerDown.disabled = false;
+    if (btnLayerBottom) btnLayerBottom.disabled = false;
+    if (btnLayerDuplicate) btnLayerDuplicate.disabled = false;
+    if (btnLayerDelete) btnLayerDelete.disabled = false;
+  }
+
+  function clearLayerHighlightInPanel() {
+    if (!layersContainer) return;
+    layersContainer.querySelectorAll('.layer-item').forEach(row => {
+      row.classList.remove('active-layer');
+    });
+    if (btnLayerTop) btnLayerTop.disabled = true;
+    if (btnLayerUp) btnLayerUp.disabled = true;
+    if (btnLayerDown) btnLayerDown.disabled = true;
+    if (btnLayerBottom) btnLayerBottom.disabled = true;
+    if (btnLayerDuplicate) btnLayerDuplicate.disabled = true;
+    if (btnLayerDelete) btnLayerDelete.disabled = true;
+  }
+
+  function renderLayersPanel() {
+    const count = elements.length;
+    if (layersBadge) layersBadge.textContent = count;
+    if (tabLayersCount) tabLayersCount.textContent = count;
+
+    const hasSelection = !!selectedElement;
+    if (btnLayerTop) btnLayerTop.disabled = !hasSelection;
+    if (btnLayerUp) btnLayerUp.disabled = !hasSelection;
+    if (btnLayerDown) btnLayerDown.disabled = !hasSelection;
+    if (btnLayerBottom) btnLayerBottom.disabled = !hasSelection;
+    if (btnLayerDuplicate) btnLayerDuplicate.disabled = !hasSelection;
+    if (btnLayerDelete) btnLayerDelete.disabled = !hasSelection;
+
+    if (!layersContainer) return;
+
+    if (count === 0) {
+      layersContainer.innerHTML = `
+        <div class="layers-empty">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <strong style="display:block; margin: 4px 0; color: var(--text-primary);">No layers yet</strong>
+          <span>Add text or images using the toolbar above or below.</span>
+        </div>
+      `;
+      return;
+    }
+
+    // Inkscape order: Top of UI list is the TOPMOST element (front, highest z-index)
+    let html = '';
+    for (let i = count - 1; i >= 0; i--) {
+      const item = elements[i];
+      const isSelected = selectedElement && selectedElement.id === item.id;
+      const isHidden = !!item.hidden;
+      const isLocked = !!item.locked;
+      const name = getDefaultLayerName(item);
+
+      const eyeIconSvg = isHidden
+        ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`
+        : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+
+      const lockIconSvg = isLocked
+        ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`
+        : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
+
+      let badgeHtml = '';
+      if (item.type === 'image') {
+        const thumbSrc = item.dataUrl || item.rawSrc;
+        badgeHtml = `<div class="layer-badge-icon" title="Image element"><img class="layer-thumb-img" src="${thumbSrc}" alt="img" /></div>`;
+      } else {
+        badgeHtml = `<div class="layer-badge-icon" title="Text element">T</div>`;
+      }
+
+      html += `
+        <div class="layer-item ${isSelected ? 'active-layer' : ''} ${isHidden ? 'layer-hidden' : ''} ${isLocked ? 'layer-locked' : ''}" 
+             data-id="${item.id}" 
+             data-index="${i}"
+             draggable="true">
+          <span class="layer-drag-handle" title="Drag to reorder layer stack">&#x283F;</span>
+          <button class="layer-btn-icon btn-toggle-vis" type="button" title="${isHidden ? 'Show layer' : 'Hide layer'}" data-action="visibility">
+            ${eyeIconSvg}
+          </button>
+          <button class="layer-btn-icon btn-toggle-lock ${isLocked ? 'active-lock' : ''}" type="button" title="${isLocked ? 'Unlock layer' : 'Lock layer'}" data-action="lock">
+            ${lockIconSvg}
+          </button>
+          ${badgeHtml}
+          <span class="layer-name" title="Double click to rename">${escapeHtml(name)}</span>
+          <button class="layer-quick-del" type="button" title="Delete layer" data-action="delete">&#10005;</button>
+        </div>
+      `;
+    }
+
+    layersContainer.innerHTML = html;
+
+    const rows = layersContainer.querySelectorAll('.layer-item');
+    rows.forEach(row => {
+      const id = row.dataset.id;
+      const record = elements.find(e => e.id === id);
+      if (!record) return;
+
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action]') || e.target.classList.contains('layer-name-input')) return;
+        selectElement(record);
+      });
+
+      const nameSpan = row.querySelector('.layer-name');
+      if (nameSpan) {
+        nameSpan.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          const currentName = record.name || getDefaultLayerName(record);
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'layer-name-input';
+          input.value = currentName;
+          nameSpan.replaceWith(input);
+          input.focus();
+          input.select();
+
+          const save = () => {
+            const val = input.value.trim();
+            if (val) {
+              record.name = val;
+            }
+            renderLayersPanel();
+            triggerAutoSave();
+          };
+
+          input.addEventListener('keydown', (ke) => {
+            if (ke.key === 'Enter') {
+              save();
+            } else if (ke.key === 'Escape') {
+              renderLayersPanel();
+            }
+          });
+          input.addEventListener('blur', save);
+        });
+      }
+
+      const visBtn = row.querySelector('.btn-toggle-vis');
+      if (visBtn) {
+        visBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleLayerVisibility(id);
+        });
+      }
+
+      const lockBtn = row.querySelector('.btn-toggle-lock');
+      if (lockBtn) {
+        lockBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleLayerLock(id);
+        });
+      }
+
+      const delBtn = row.querySelector('.layer-quick-del');
+      if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteLayer(id);
+        });
+      }
+
+      row.addEventListener('dragstart', (e) => {
+        draggedLayerId = id;
+        e.dataTransfer.effectAllowed = 'move';
+        row.style.opacity = '0.5';
+      });
+
+      row.addEventListener('dragend', () => {
+        draggedLayerId = null;
+        row.style.opacity = '1';
+        rows.forEach(r => {
+          r.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+      });
+
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = row.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          row.classList.add('drag-over-top');
+          row.classList.remove('drag-over-bottom');
+        } else {
+          row.classList.add('drag-over-bottom');
+          row.classList.remove('drag-over-top');
+        }
+      });
+
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+        if (!draggedLayerId || draggedLayerId === id) return;
+
+        const srcIdx = elements.findIndex(el => el.id === draggedLayerId);
+        const targetIdx = elements.findIndex(el => el.id === id);
+        if (srcIdx < 0 || targetIdx < 0) return;
+
+        const rect = row.getBoundingClientRect();
+        const dropAbove = e.clientY < (rect.top + rect.height / 2);
+
+        const item = elements.splice(srcIdx, 1)[0];
+        let newIdx = elements.findIndex(el => el.id === id);
+        if (dropAbove) {
+          newIdx += 1;
+        }
+        elements.splice(newIdx, 0, item);
+        syncDOMZIndex();
+        renderLayersPanel();
+        triggerAutoSave();
+      });
+    });
+  }
+
+  function toggleLayerVisibility(id) {
+    const record = elements.find(e => e.id === id);
+    if (!record) return;
+    record.hidden = !record.hidden;
+    if (record.domNode) {
+      record.domNode.style.display = record.hidden ? 'none' : '';
+    }
+    if (record.hidden && selectedElement && selectedElement.id === id) {
+      deselectAll();
+    }
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function toggleLayerLock(id) {
+    const record = elements.find(e => e.id === id);
+    if (!record) return;
+    record.locked = !record.locked;
+    if (record.domNode) {
+      if (record.locked) {
+        record.domNode.classList.add('element-locked');
+      } else {
+        record.domNode.classList.remove('element-locked');
+      }
+    }
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function deleteLayer(id) {
+    const record = elements.find(e => e.id === id);
+    if (!record) return;
+    if (selectedElement && selectedElement.id === id) {
+      deselectAll();
+    }
+    if (record.domNode) record.domNode.remove();
+    elements = elements.filter(e => e.id !== id);
+    syncDOMZIndex();
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function moveSelectedLayerUp() {
+    if (!selectedElement) return;
+    const idx = elements.findIndex(e => e.id === selectedElement.id);
+    if (idx < 0 || idx >= elements.length - 1) return;
+    const temp = elements[idx];
+    elements[idx] = elements[idx + 1];
+    elements[idx + 1] = temp;
+    syncDOMZIndex();
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function moveSelectedLayerDown() {
+    if (!selectedElement) return;
+    const idx = elements.findIndex(e => e.id === selectedElement.id);
+    if (idx <= 0) return;
+    const temp = elements[idx];
+    elements[idx] = elements[idx - 1];
+    elements[idx - 1] = temp;
+    syncDOMZIndex();
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function moveSelectedLayerToTop() {
+    if (!selectedElement) return;
+    const idx = elements.findIndex(e => e.id === selectedElement.id);
+    if (idx < 0 || idx === elements.length - 1) return;
+    const item = elements.splice(idx, 1)[0];
+    elements.push(item);
+    syncDOMZIndex();
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function moveSelectedLayerToBottom() {
+    if (!selectedElement) return;
+    const idx = elements.findIndex(e => e.id === selectedElement.id);
+    if (idx <= 0) return;
+    const item = elements.splice(idx, 1)[0];
+    elements.unshift(item);
+    syncDOMZIndex();
+    renderLayersPanel();
+    triggerAutoSave();
+  }
+
+  function duplicateSelectedLayer() {
+    if (!selectedElement) return;
+    const el = selectedElement;
+    if (el.type === 'text') {
+      const offset = 20;
+      const newX = Math.min(CANVAS_WIDTH - 80, el.x + offset);
+      const newY = Math.min(CANVAS_HEIGHT - 60, el.y + offset);
+      const copy = addTextElement(el.contentNode ? el.contentNode.innerText : el.text, newX, newY, el.fontSize, el.align, el.rotation, el.color, `${el.name || 'Text'} (Copy)`);
+      selectElement(copy);
+    } else if (el.type === 'image') {
+      const offset = 20;
+      const newX = Math.min(CANVAS_WIDTH - 80, el.x + offset);
+      const newY = Math.min(CANVAS_HEIGHT - 60, el.y + offset);
+      const copy = addImageElement(el.dataUrl, el.origW || el.width, el.origH || el.height, el.rotation, el.width, el.height, newX, newY, el.rawSrc, el.isInverted, `${el.name || 'Image'} (Copy)`);
+      selectElement(copy);
+    }
+    triggerAutoSave();
+  }
+
+  function switchSidebarTab(tabName) {
+    activeSidebarTab = tabName;
+    if (tabName === 'layers') {
+      if (tabLayers) tabLayers.classList.add('active');
+      if (tabHistory) tabHistory.classList.remove('active');
+      if (layersPanelView) layersPanelView.style.display = 'flex';
+      if (historyPanelView) historyPanelView.style.display = 'none';
+      renderLayersPanel();
+    } else {
+      if (tabHistory) tabHistory.classList.add('active');
+      if (tabLayers) tabLayers.classList.remove('active');
+      if (historyPanelView) historyPanelView.style.display = 'flex';
+      if (layersPanelView) layersPanelView.style.display = 'none';
+      renderHistorySidebar();
+    }
+  }
+
+  function openSidebar(tabName) {
+    if (tabName) switchSidebarTab(tabName);
+    const sidebar = document.getElementById('historySidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
+  }
+
+  function toggleSidebar(tabName) {
+    const sidebar = document.getElementById('historySidebar');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.contains('open');
+
+    if (!isOpen) {
+      openSidebar(tabName);
+    } else if (activeSidebarTab !== tabName) {
+      switchSidebarTab(tabName);
+    } else {
+      closeHistorySidebar();
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1737,6 +2394,7 @@
     const scaleY = 150 / CANVAS_HEIGHT;
 
     for (const el of elements) {
+      if (el.hidden) continue;
       if (el.type === 'image') {
         await new Promise((resolve) => {
           const img = new Image();
@@ -1817,7 +2475,7 @@
     const thumb = await generateThumbnail();
     const textSummary = elements
       .filter(e => e.type === 'text')
-      .map(e => e.contentNode.innerText.trim())
+      .map(e => (e.contentNode ? e.contentNode.innerText.trim() : e.text || ''))
       .filter(t => t.length > 0)
       .join(' | ') || (elements.some(e => e.type === 'image') ? 'Image Composition' : 'Untitled Label');
 
@@ -1833,6 +2491,7 @@
       }
       return {
         id: el.id,
+        name: el.name,
         type: el.type,
         x: el.x,
         y: el.y,
@@ -1844,8 +2503,15 @@
         lines: domLines || el.lines,
         width: domW,
         height: domH,
+        origW: el.origW || domW,
+        origH: el.origH || domH,
         aspectRatio: el.aspectRatio,
-        dataUrl: el.dataUrl
+        dataUrl: el.dataUrl,
+        rawSrc: el.rawSrc,
+        isInverted: !!el.isInverted,
+        locked: !!el.locked,
+        hidden: !!el.hidden,
+        zIndex: el.zIndex
       };
     });
 
@@ -2453,9 +3119,10 @@
     const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
     const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
-    // Draw elements
+    // Draw elements in stacking order (bottom to top)
     for (const el of (sticker.elements || [])) {
-      if (el.type === 'image' && el.dataUrl) {
+      if (el.hidden) continue;
+      if (el.type === 'image' && (el.rawSrc || el.dataUrl)) {
         await drawImageElementToCanvas(ctx, el, scaleX, scaleY);
       } else if (el.type === 'text') {
         drawSerializedTextToCanvas(ctx, el, scaleX, scaleY, sticker.isBlackBg);
@@ -2530,27 +3197,44 @@
     ctx.restore();
   }
 
-  function drawImageElementToCanvas(ctx, el, scaleX, scaleY) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const w = el.width * scaleX;
-        const h = el.height * scaleY;
-        const cx = (el.x * scaleX) + (w / 2);
-        const cy = (el.y * scaleY) + (h / 2);
+  async function drawImageElementToCanvas(ctx, el, scaleX, scaleY) {
+    if (el.hidden) return;
 
-        ctx.save();
-        ctx.translate(cx, cy);
-        if (el.rotation) {
-          ctx.rotate((el.rotation * Math.PI) / 180);
-        }
-        ctx.drawImage(img, -w / 2, -h / 2, w, h);
-        ctx.restore();
-        resolve();
-      };
-      img.onerror = () => resolve();
-      img.src = el.dataUrl;
-    });
+    const printW = Math.max(1, Math.round(el.width * scaleX));
+    const printH = Math.max(1, Math.round(el.height * scaleY));
+    const cx = (el.x * scaleX) + (printW / 2);
+    const cy = (el.y * scaleY) + (printH / 2);
+
+    let imgToDraw = null;
+    if (el.rawSrc) {
+      try {
+        const rawImg = await loadImagePromise(el.rawSrc);
+        imgToDraw = generateDitheredBitmap(rawImg, printW, printH, {
+          useDither: isPhotoDither,
+          isInverted: !!el.isInverted
+        });
+      } catch (err) {
+        console.warn('Failed to redither rawSrc at printhead resolution, using fallback dataUrl:', err);
+      }
+    }
+
+    if (!imgToDraw && el.dataUrl) {
+      try {
+        imgToDraw = await loadImagePromise(el.dataUrl);
+      } catch (err) {
+        return;
+      }
+    }
+
+    if (!imgToDraw) return;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (el.rotation) {
+      ctx.rotate((el.rotation * Math.PI) / 180);
+    }
+    ctx.drawImage(imgToDraw, -printW / 2, -printH / 2, printW, printH);
+    ctx.restore();
   }
 
   function enforceStrictMonochrome(ctx, w, h) {

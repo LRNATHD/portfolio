@@ -26,6 +26,15 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           <span>Console</span>
         </button>
+        <button id="btnToggleLayers" class="header-btn" type="button" title="View & manage layers (Inkscape style)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span>Layers</span>
+          <span id="layersBadge" class="history-count-badge">0</span>
+        </button>
         <button id="btnToggleHistory" class="header-btn" type="button" title="View past transmissions">
           <span>Transmissions</span>
           <span id="historyBadge" class="history-count-badge">0</span>
@@ -113,21 +122,82 @@
         </div>
       </main>
 
-      <!-- Past Transmissions History Sidebar / Drawer -->
-      <aside class="history-sidebar" id="historySidebar">
-        <div class="history-sidebar-header">
-          <div class="history-title">
+      <!-- Inkscape Layers & Transmissions Studio Sidebar -->
+      <aside class="history-sidebar studio-sidebar" id="historySidebar">
+        <!-- Tab Navigation Bar -->
+        <div class="sidebar-tab-bar">
+          <button id="tabLayers" class="sidebar-tab active" type="button" title="Inkscape Layers & Objects">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            <span>Layers</span>
+            <span id="tabLayersCount" class="tab-badge">0</span>
+          </button>
+          <button id="tabHistory" class="sidebar-tab" type="button" title="Past Transmissions History">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
             <span>Transmissions</span>
-          </div>
+            <span id="tabHistoryCount" class="tab-badge">0</span>
+          </button>
           <button id="btnSidebarClose" class="btn-sidebar-close" type="button" title="Close drawer">&times;</button>
         </div>
 
-        <button id="btnNewCanvasSidebar" class="btn-new-canvas" type="button">
-          <span>+ New Blank Canvas</span>
-        </button>
+        <!-- Inkscape Layers & Objects Panel -->
+        <div class="sidebar-panel-view active" id="layersPanelView">
+          <!-- Inkscape Action Toolbar: Top, Raise, Lower, Bottom, Duplicate, Delete -->
+          <div class="layers-actions-bar">
+            <div class="layer-actions-group">
+              <button id="btnLayerTop" class="layer-action-btn" type="button" title="Bring to Front (Shift+Ctrl+])">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7M5 5h14"/></svg>
+              </button>
+              <button id="btnLayerUp" class="layer-action-btn" type="button" title="Raise Layer (Ctrl+])">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+              <button id="btnLayerDown" class="layer-action-btn" type="button" title="Lower Layer (Ctrl+[)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+              </button>
+              <button id="btnLayerBottom" class="layer-action-btn" type="button" title="Send to Back (Shift+Ctrl+[)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7M5 19h14"/></svg>
+              </button>
+            </div>
+            <div class="layer-actions-group">
+              <button id="btnLayerDuplicate" class="layer-action-btn" type="button" title="Duplicate Layer (Ctrl+D)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+              <button id="btnLayerDelete" class="layer-action-btn danger" type="button" title="Delete Layer (Delete)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+            </div>
+          </div>
 
-        <div class="history-list" id="historyContainer">
-          <!-- Dynamically populated from localStorage -->
+          <!-- Layers Stack List (Top of list = Topmost element) -->
+          <div class="layers-list" id="layersContainer">
+            <!-- Dynamically populated from elements array -->
+          </div>
+
+          <!-- Quick Add Layer Controls at Bottom of Panel -->
+          <div class="layers-bottom-bar">
+            <button id="btnLayerAddText" class="btn-layer-add" type="button" title="Add new text layer">
+              <span>+ Text</span>
+            </button>
+            <button id="btnLayerAddImage" class="btn-layer-add" type="button" title="Add new image layer">
+              <span>+ Image</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Transmissions History Panel -->
+        <div class="sidebar-panel-view" id="historyPanelView" style="display: none;">
+          <button id="btnNewCanvasSidebar" class="btn-new-canvas" type="button">
+            <span>+ New Blank Canvas</span>
+          </button>
+          <div class="history-list" id="historyContainer">
+            <!-- Dynamically populated from localStorage -->
+          </div>
         </div>
       </aside>
     </div>
