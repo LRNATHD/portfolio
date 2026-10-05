@@ -8,6 +8,8 @@
  * - 1:1 Ultra-Detail printhead dithering (up to 1200px native resolution)
  */
 
+import html2canvas from 'html2canvas';
+
 (function () {
   'use strict';
 
@@ -2378,95 +2380,28 @@
   }
 
   /**
-   * Generates a lightweight 100x150 thumbnail snapshot from the current stage.
+   * Generates a lightweight 100x150 thumbnail snapshot matching the exact stage preview.
    */
   async function generateThumbnail() {
-    const thumbCanvas = document.createElement('canvas');
-    thumbCanvas.width = 100;
-    thumbCanvas.height = 150;
-    const ctx = thumbCanvas.getContext('2d');
-
-    // Solid background matching stage
-    ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
-    ctx.fillRect(0, 0, 100, 150);
-
-    const scaleX = 100 / CANVAS_WIDTH;
-    const scaleY = 150 / CANVAS_HEIGHT;
-
-    for (const el of elements) {
-      if (el.hidden) continue;
-      if (el.type === 'image') {
-        await new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const w = el.width * scaleX;
-            const h = el.height * scaleY;
-            const cx = (el.x * scaleX) + (w / 2);
-            const cy = (el.y * scaleY) + (h / 2);
-
-            ctx.save();
-            ctx.translate(cx, cy);
-            if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
-            ctx.drawImage(img, -w / 2, -h / 2, w, h);
-            ctx.restore();
-            resolve();
-          };
-          img.onerror = () => resolve();
-          img.src = el.dataUrl;
-        });
-      } else if (el.type === 'text') {
-        const fontSize = (el.fontSize || 24) * scaleX;
-        ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-
-        const thumbStartX = Math.max(0, el.x * scaleX);
-        const availableThumbW = Math.max(25, 100 - thumbStartX - (2 * scaleX));
-
-        const lines = getWrappedTextLines(ctx, el, availableThumbW);
-        let maxLineWidth = 0;
-        for (const l of lines) {
-          if (!l) continue;
-          const tw = ctx.measureText(l).width;
-          if (tw > maxLineWidth) maxLineWidth = tw;
-        }
-
-        const paddingX = 2 * scaleX;
-        const paddingY = 2 * scaleY;
-        const thumbBoxW = Math.min(maxLineWidth + (paddingX * 2), availableThumbW);
-        const lineHeight = fontSize * 1.25;
-        const totalHeight = lines.length * lineHeight;
-        const thumbBoxH = totalHeight + (paddingY * 2);
-
-        const cx = thumbStartX + (thumbBoxW / 2);
-        const cy = (el.y * scaleY) + (thumbBoxH / 2);
-
-        ctx.save();
-        ctx.translate(cx, cy);
-        if (el.rotation) ctx.rotate(el.rotation * Math.PI / 180);
-
-        ctx.fillStyle = el.color || (isBlackBg ? '#ffffff' : '#000000');
-        const startY = -(thumbBoxH / 2) + paddingY + (fontSize * 0.88);
-
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line) continue;
-          const y = startY + (i * lineHeight);
-          const tw = ctx.measureText(line).width;
-
-          if (el.align === 'center') {
-            ctx.fillText(line, -(tw / 2), y);
-          } else if (el.align === 'right') {
-            const rightEdge = (thumbBoxW / 2) - paddingX;
-            ctx.fillText(line, rightEdge - tw, y);
-          } else {
-            const leftEdge = -(thumbBoxW / 2) + paddingX;
-            ctx.fillText(line, leftEdge, y);
-          }
-        }
-        ctx.restore();
-      }
+    try {
+      const dataUrl = await captureCurrentStageToDataUrl();
+      const img = await loadImagePromise(dataUrl);
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 100;
+      thumbCanvas.height = 150;
+      const ctx = thumbCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 100, 150);
+      return thumbCanvas.toDataURL('image/jpeg', 0.85);
+    } catch (err) {
+      console.warn('Thumbnail generation fallback:', err);
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 100;
+      thumbCanvas.height = 150;
+      const ctx = thumbCanvas.getContext('2d');
+      ctx.fillStyle = isBlackBg ? '#000000' : '#ffffff';
+      ctx.fillRect(0, 0, 100, 150);
+      return thumbCanvas.toDataURL('image/jpeg', 0.85);
     }
-
-    return thumbCanvas.toDataURL('image/jpeg', 0.85);
   }
 
   async function saveSnapshotToHistory(reason = 'Saved') {
@@ -2945,10 +2880,10 @@
     const activeIdx = project.stickers.indexOf(curSticker);
     const labelTitle = project.stickers.length > 1 ? `Card ${activeIdx + 1} of ${project.stickers.length}` : 'Physical Card';
 
-    showModal(`Synthesizing ${labelTitle}...`, 'Compositing monochrome dot matrix (800x1200)...', 25, 'Render');
+    showModal(`Synthesizing ${labelTitle}...`, 'Capturing preview dot matrix (800x1200)...', 25, 'Render');
 
     try {
-      const pngDataUrl = await renderStickerToDataUrl(curSticker);
+      const pngDataUrl = await captureCurrentStageToDataUrl(curSticker);
 
       updateModal('Queueing Transmission...', 'Dispatched payload to cloud pipeline...', 50, false, 'Queue');
 
@@ -3020,6 +2955,15 @@
     const total = project.stickers.length;
     showModal('Transmitting Card Sequence...', `Synthesizing ${total} cards for physical manifestation...`, 15, 'Render');
 
+    const originalActiveId = project.activeId;
+    const wasRollMode = project.viewMode === 'roll';
+    if (wasRollMode && canvasContainer) {
+      canvasContainer.classList.remove('roll-mode');
+      canvasContainer.innerHTML = '';
+      stage.classList.remove('active-stage');
+      canvasContainer.appendChild(stage);
+    }
+
     try {
       const speed = parseFloat(selectPrintSpeed?.value || localStorage.getItem('realtalk_print_speed') || '1.5');
       const density = parseInt(selectPrintDensity?.value || localStorage.getItem('realtalk_print_density') || '12', 10);
@@ -3032,13 +2976,17 @@
         const stepPct = Math.round(15 + ((i / total) * 55));
         updateModal(
           `Synthesizing Card ${i + 1} of ${total}`,
-          `Compositing monochrome dot matrix (800x1200) for card ${i + 1}...`,
+          `Capturing preview dot matrix (800x1200) for card ${i + 1}...`,
           stepPct,
           false,
           'Render'
         );
 
-        const pngDataUrl = await renderStickerToDataUrl(sticker);
+        // Mount sticker directly onto stage for exact WYSIWYG capture
+        restoreCanvasFromState(sticker);
+        project.activeId = sticker.id;
+
+        const pngDataUrl = await captureCurrentStageToDataUrl(sticker);
 
         const textSummary = (sticker.elements || [])
           .filter(e => e.type === 'text')
@@ -3103,23 +3051,144 @@
       isSubmitting = false;
       btnPrint.disabled = false;
       if (btnPrintAll) btnPrintAll.disabled = false;
+    } finally {
+      const origSticker = project.stickers.find(s => s.id === originalActiveId) || project.stickers[0];
+      if (origSticker) {
+        project.activeId = origSticker.id;
+        restoreCanvasFromState(origSticker);
+      }
+      if (wasRollMode) {
+        project.viewMode = 'roll';
+      }
+      updateStickerUI();
     }
   }
 
-  async function renderStickerToDataUrl(sticker) {
+  /**
+   * Captures the live DOM stage directly into an 800x1200 1-bit monochrome data URL
+   * using html2canvas. This guarantees 100% pixel-perfect WYSIWYG matching:
+   * exact line breaks, multi-line Enters, font kerning, letter spacing, rotations,
+   * margins, and element sizes as rendered by the browser layout engine.
+   */
+  async function captureCurrentStageToDataUrl(sticker = null) {
+    const curSticker = sticker || project.stickers.find(s => s.id === project.activeId) || project.stickers[0];
+    const isDark = !!curSticker.isBlackBg;
+
+    // 1. Deselect any active element & blur caret so selection bounds/handles are invisible
+    const previouslySelected = selectedElement;
+    deselectAll();
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    if (window.getSelection) {
+      try {
+        window.getSelection().removeAllRanges();
+      } catch (ignored) {}
+    }
+
+    // 2. Add stage capture mode (forces exact 400x600 layout, 0 border radius, no shadows)
+    stage.classList.add('stage-capture-mode');
+
+    // 3. Ensure fonts are loaded
+    if (document.fonts && document.fonts.ready) {
+      try {
+        await document.fonts.ready;
+      } catch (ignored) {}
+    }
+
+    // 4. Ensure all images on stage are fully decoded
+    const stageImages = Array.from(stage.querySelectorAll('img'));
+    if (stageImages.length > 0) {
+      await Promise.all(stageImages.map(img => {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise(resolve => {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+          setTimeout(resolve, 300);
+        });
+      }));
+    }
+
+    // 5. Allow browser layout to settle
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    let dataUrl = null;
+    try {
+      const h2c = typeof html2canvas === 'function' ? html2canvas : (window.html2canvas || null);
+      if (!h2c) {
+        throw new Error('Screenshot engine (html2canvas) is not available');
+      }
+
+      const stageCanvas = await h2c(stage, {
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        scale: 2, // 400x600 -> 800x1200 physical thermal dots
+        backgroundColor: isDark ? '#000000' : '#ffffff',
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        imageTimeout: 5000,
+        scrollX: 0,
+        scrollY: 0
+      });
+
+      // Strict 800x1200 printhead destination canvas
+      const printCanvas = document.createElement('canvas');
+      printCanvas.width = PRINT_WIDTH;
+      printCanvas.height = PRINT_HEIGHT;
+      const ctx = printCanvas.getContext('2d');
+
+      ctx.fillStyle = isDark ? '#000000' : '#ffffff';
+      ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
+      ctx.drawImage(stageCanvas, 0, 0, PRINT_WIDTH, PRINT_HEIGHT);
+
+      // Strict 1-bit monochrome threshold pass for clean thermal burn
+      enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT, isDark);
+
+      dataUrl = printCanvas.toDataURL('image/png');
+    } catch (err) {
+      console.warn('html2canvas screenshot failed, falling back to canvas synthesis:', err);
+      dataUrl = await renderStickerFallback(curSticker);
+    } finally {
+      stage.classList.remove('stage-capture-mode');
+      if (previouslySelected) {
+        selectElement(previouslySelected);
+      }
+    }
+
+    return dataUrl;
+  }
+
+  async function renderStickerToDataUrl(sticker = null) {
+    if (!sticker || sticker.id === project.activeId) {
+      return await captureCurrentStageToDataUrl(sticker);
+    }
+    const originalActiveId = project.activeId;
+    try {
+      restoreCanvasFromState(sticker);
+      project.activeId = sticker.id;
+      return await captureCurrentStageToDataUrl(sticker);
+    } finally {
+      const orig = project.stickers.find(s => s.id === originalActiveId);
+      if (orig) {
+        project.activeId = orig.id;
+        restoreCanvasFromState(orig);
+      }
+    }
+  }
+
+  async function renderStickerFallback(sticker) {
     const printCanvas = document.createElement('canvas');
     printCanvas.width = PRINT_WIDTH;
     printCanvas.height = PRINT_HEIGHT;
     const ctx = printCanvas.getContext('2d');
 
-    // Fill background (White or Black)
     ctx.fillStyle = sticker.isBlackBg ? '#000000' : '#ffffff';
     ctx.fillRect(0, 0, PRINT_WIDTH, PRINT_HEIGHT);
 
     const scaleX = PRINT_WIDTH / CANVAS_WIDTH;
     const scaleY = PRINT_HEIGHT / CANVAS_HEIGHT;
 
-    // Draw elements in stacking order (bottom to top)
     for (const el of (sticker.elements || [])) {
       if (el.hidden) continue;
       if (el.type === 'image' && (el.rawSrc || el.dataUrl)) {
@@ -3129,15 +3198,13 @@
       }
     }
 
-    // Subtle corner watermark
     ctx.fillStyle = sticker.isBlackBg ? '#ffffff' : '#000000';
     ctx.font = '16px monospace';
-    const watermark = 'made by noahsmith.dev';
+    const watermark = 'noahsmith.dev // realtalk';
     const wmWidth = ctx.measureText(watermark).width;
     ctx.fillText(watermark, PRINT_WIDTH - wmWidth - 24, PRINT_HEIGHT - 20);
 
-    // Strict 1-bit threshold pass to guarantee pure monochrome dots
-    enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT);
+    enforceStrictMonochrome(ctx, PRINT_WIDTH, PRINT_HEIGHT, !!sticker.isBlackBg);
 
     return printCanvas.toDataURL('image/png');
   }
@@ -3147,7 +3214,6 @@
     ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 
     const printStartX = Math.max(0, el.x * scaleX);
-    // Allow text to use the full printable width up to the right edge (with 10px margin)
     const availablePaperW = Math.max(120 * scaleX, PRINT_WIDTH - printStartX - (10 * scaleX));
 
     const lines = getWrappedTextLines(ctx, el, availablePaperW);
@@ -3237,12 +3303,13 @@
     ctx.restore();
   }
 
-  function enforceStrictMonochrome(ctx, w, h) {
+  function enforceStrictMonochrome(ctx, w, h, isBlackBg = false) {
     const imgData = ctx.getImageData(0, 0, w, h);
     const d = imgData.data;
+    const threshold = isBlackBg ? 120 : 160;
     for (let i = 0; i < d.length; i += 4) {
       const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      const v = lum < 140 ? 0 : 255;
+      const v = lum < threshold ? 0 : 255;
       d[i] = v;
       d[i + 1] = v;
       d[i + 2] = v;

@@ -552,6 +552,47 @@ html, body {
   color: #555555;
 }
 
+/* Snapshot mode for 1:1 WYSIWYG thermal printhead capture */
+.thermal-stage.stage-capture-mode {
+  width: 400px !important;
+  height: 600px !important;
+  min-width: 400px !important;
+  min-height: 600px !important;
+  max-width: 400px !important;
+  max-height: 600px !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  transform: none !important;
+  transition: none !important;
+  margin: 0 !important;
+}
+
+.thermal-stage.stage-capture-mode .rotate-stem,
+.thermal-stage.stage-capture-mode .rotate-handle,
+.thermal-stage.stage-capture-mode .resize-handle {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+.thermal-stage.stage-capture-mode .canvas-element.selected {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.thermal-stage.stage-capture-mode .stage-watermark {
+  color: #000000 !important;
+  opacity: 0.8 !important;
+}
+
+.thermal-stage.black-bg.stage-capture-mode .stage-watermark {
+  color: #ffffff !important;
+  opacity: 0.8 !important;
+}
+
 .unselectable {
   user-select: none;
   -webkit-user-select: none;
