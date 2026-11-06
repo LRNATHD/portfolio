@@ -37,7 +37,6 @@
   const previewNumber = document.getElementById('previewNumber');
 
   // Admin DOM
-  const btnAdminToggle = document.getElementById('btnAdminToggle');
   const adminSection = document.getElementById('adminSection');
   const postponeStateLabel = document.getElementById('postponeStateLabel');
   const postponeInput = document.getElementById('postponeInput');
@@ -48,6 +47,7 @@
   const btnResumeNow = document.getElementById('btnResumeNow');
   const archiveCountTitle = document.getElementById('archiveCountTitle');
   const archiveList = document.getElementById('archiveList');
+  const btnPrintUnprinted = document.getElementById('btnPrintUnprinted');
   const btnExportJson = document.getElementById('btnExportJson');
 
   function init() {
@@ -57,6 +57,7 @@
     syncUIQuotaState();
     fetchRemoteQuotaState().then(() => {
       checkAndFlushPostponed();
+      syncUnconfirmedQuoteStatuses();
     });
     setInterval(updateLiveTimestamp, 15000);
     setInterval(() => {
@@ -168,6 +169,31 @@
       });
     }
 
+    if (btnPrintUnprinted) {
+      btnPrintUnprinted.addEventListener('click', async () => {
+        btnPrintUnprinted.disabled = true;
+        btnPrintUnprinted.textContent = 'Printing...';
+        try {
+          await fetchRemoteQuotaState();
+          await syncUnconfirmedQuoteStatuses();
+          const toPrint = savedItems.filter(it => it.status !== 'printed');
+          for (const item of toPrint) {
+            await sendItemToPrinter(item);
+            item.status = 'printed';
+          }
+          if (toPrint.length > 0) {
+            await persistRemoteState();
+          }
+          renderAdminUI();
+        } catch (e) {
+          console.error(e);
+        } finally {
+          btnPrintUnprinted.disabled = false;
+          btnPrintUnprinted.textContent = 'Print unprinted';
+        }
+      });
+    }
+
     if (btnExportJson) {
       btnExportJson.addEventListener('click', () => {
         const blob = new Blob([JSON.stringify(savedItems, null, 2)], { type: 'application/json' });
@@ -181,6 +207,58 @@
     }
   }
 
+  function getItemKey(item) {
+    if (item.uid) return item.uid;
+    return `${item.title || ''}|${(item.description || '').slice(0, 40)}|${item.author || ''}|${item.time || ''}`;
+  }
+
+  /**
+   * Merges local and remote saved items without ever dropping any submission,
+   * even if two visitors submit from different Cloudflare edge locations within 60s.
+   */
+  function mergeSavedItems(existingList, incomingList) {
+    const map = new Map();
+    const statusPriority = { printed: 4, queued: 3, postponed: 2, failed: 1 };
+
+    for (const item of [...existingList, ...incomingList]) {
+      if (!item || !item.title) continue;
+      const key = getItemKey(item);
+      if (!map.has(key)) {
+        map.set(key, { ...item });
+      } else {
+        const prev = map.get(key);
+        const prevPrio = statusPriority[prev.status] || 0;
+        const nextPrio = statusPriority[item.status] || 0;
+        map.set(key, {
+          ...prev,
+          ...item,
+          quoteId: item.quoteId || prev.quoteId,
+          status: nextPrio >= prevPrio ? item.status : prev.status
+        });
+      }
+    }
+
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => (a.num || 9999) - (b.num || 9999));
+
+    // Ensure strictly unique sequential numbers 1..N so concurrent submits never collide
+    const usedNums = new Set();
+    let maxNum = 0;
+    for (const it of merged) {
+      if (typeof it.num === 'number' && it.num > 0 && !usedNums.has(it.num)) {
+        usedNums.add(it.num);
+        if (it.num > maxNum) maxNum = it.num;
+      } else {
+        maxNum++;
+        while (usedNums.has(maxNum)) maxNum++;
+        it.num = maxNum;
+        usedNums.add(maxNum);
+      }
+    }
+
+    return merged;
+  }
+
   async function fetchRemoteQuotaState() {
     try {
       const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${KV_STATE_ID}&t=${Date.now()}`, {
@@ -190,16 +268,17 @@
         const data = await res.json();
         if (data && typeof data.error === 'string' && data.error.startsWith('{')) {
           const parsed = JSON.parse(data.error);
-          if (typeof parsed.total === 'number') {
-            globalTotalPrints = Math.max(0, Math.min(GLOBAL_MAX, parsed.total));
-            globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
-          }
           if (typeof parsed.postponeUntil === 'number') {
             postponeUntil = parsed.postponeUntil;
           }
           if (Array.isArray(parsed.items)) {
-            savedItems = parsed.items;
+            savedItems = mergeSavedItems(savedItems, parsed.items);
           }
+          const highestItemNum = savedItems.reduce((acc, it) => Math.max(acc, it.num || 0), 0);
+          const remoteTotal = typeof parsed.total === 'number' ? parsed.total : 0;
+          globalTotalPrints = Math.max(globalTotalPrints, remoteTotal, highestItemNum, savedItems.length);
+          globalTotalPrints = Math.min(GLOBAL_MAX, globalTotalPrints);
+          globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
         }
       }
     } catch (ignored) {}
@@ -208,6 +287,24 @@
   }
 
   async function persistRemoteState() {
+    // Re-fetch and merge right before writing to minimize cross-datacenter race window
+    try {
+      const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${KV_STATE_ID}&t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.error === 'string' && data.error.startsWith('{')) {
+          const parsed = JSON.parse(data.error);
+          if (Array.isArray(parsed.items)) {
+            savedItems = mergeSavedItems(savedItems, parsed.items);
+          }
+          const highestItemNum = savedItems.reduce((acc, it) => Math.max(acc, it.num || 0), 0);
+          globalTotalPrints = Math.max(globalTotalPrints, parsed.total || 0, highestItemNum, savedItems.length);
+        }
+      }
+    } catch (ignored) {}
+
     const statePayload = JSON.stringify({
       total: globalTotalPrints,
       postponeUntil,
@@ -223,6 +320,37 @@
         error: statePayload
       })
     });
+  }
+
+  async function syncUnconfirmedQuoteStatuses() {
+    let changed = false;
+    for (const item of savedItems) {
+      if (!item.quoteId || item.status === 'postponed') continue;
+      try {
+        const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${encodeURIComponent(item.quoteId)}&t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+        if (res.ok) {
+          const st = await res.json();
+          if (st.status === 'printed' && item.status !== 'printed') {
+            item.status = 'printed';
+            delete item.error;
+            changed = true;
+          } else if (st.status === 'failed' && item.status !== 'failed') {
+            item.status = 'failed';
+            item.error = st.error || 'Printer disconnected';
+            changed = true;
+          } else if (st.status === 'pending' && item.status !== 'queued') {
+            item.status = 'queued';
+            changed = true;
+          }
+        }
+      } catch (ignored) {}
+    }
+    if (changed) {
+      await persistRemoteState();
+      renderAdminUI();
+    }
   }
 
   async function updatePostponeSchedule(newPostponeUntil) {
@@ -269,17 +397,13 @@
         return;
       }
 
-      // Mark as printed in KV first to prevent duplicate flushes
-      for (const item of held) {
-        item.status = 'printed';
-      }
       postponeUntil = 0;
-      await persistRemoteState();
-      renderAdminUI();
-
       for (const item of held) {
         await sendItemToPrinter(item);
+        item.status = 'queued';
       }
+      await persistRemoteState();
+      renderAdminUI();
     } catch (e) {
       console.error('Flush error:', e);
     } finally {
@@ -305,22 +429,77 @@
     if (!res.ok) {
       throw new Error(`Printer queue error ${res.status}`);
     }
+    const data = await res.json();
+    if (data && data.id) {
+      item.quoteId = data.id;
+    }
+    return data.id;
+  }
+
+  /**
+   * Polls the quote status for up to ~10s after submission.
+   * If the phone bridge reports a transient Bluetooth connection failure,
+   * automatically re-queues it once so the print is not lost.
+   */
+  async function verifyPrintDelivery(item) {
+    if (!item.quoteId) return;
+    let retried = false;
+
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${encodeURIComponent(item.quoteId)}&t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+        if (!res.ok) continue;
+        const st = await res.json();
+
+        if (st.status === 'printed') {
+          item.status = 'printed';
+          delete item.error;
+          await persistRemoteState();
+          renderAdminUI();
+          return true;
+        }
+
+        if (st.status === 'failed') {
+          if (!retried) {
+            retried = true;
+            await sendItemToPrinter(item);
+            await persistRemoteState();
+            continue;
+          } else {
+            item.status = 'failed';
+            item.error = st.error || 'Printer offline';
+            await persistRemoteState();
+            renderAdminUI();
+            return false;
+          }
+        }
+      } catch (ignored) {}
+    }
+
+    // Still pending in queue (printer will pick it up on next poll or when online)
+    await persistRemoteState();
+    renderAdminUI();
+    return false;
   }
 
   function renderAdminUI() {
     if (!adminSection || adminSection.classList.contains('hidden')) return;
 
     const heldCount = savedItems.filter(it => it.status === 'postponed').length;
+    const unprintedCount = savedItems.filter(it => it.status !== 'printed').length;
 
     if (postponeUntil === -1) {
-      postponeStateLabel.textContent = `Held indefinitely (${heldCount} queued)`;
+      postponeStateLabel.textContent = `Held indefinitely (${heldCount} postponed)`;
     } else if (postponeUntil > Date.now()) {
       const dt = new Date(postponeUntil);
       const timeStr = dt.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      postponeStateLabel.textContent = `Postponed until ${timeStr} (${heldCount} queued)`;
+      postponeStateLabel.textContent = `Postponed until ${timeStr} (${heldCount} postponed)`;
     } else {
-      postponeStateLabel.textContent = heldCount > 0
-        ? `Ready to release (${heldCount} queued)`
+      postponeStateLabel.textContent = unprintedCount > 0
+        ? `Printing immediately (${unprintedCount} unconfirmed/queued)`
         : 'Printing immediately';
     }
 
@@ -351,8 +530,9 @@
       titleSpan.textContent = item.title;
 
       const badge = document.createElement('span');
-      badge.className = 'archive-badge' + (item.status === 'postponed' ? ' held' : '');
-      badge.textContent = `[${item.status || 'printed'}]`;
+      const isPendingOrFailed = item.status === 'postponed' || item.status === 'failed' || item.status === 'queued';
+      badge.className = 'archive-badge' + (isPendingOrFailed ? ' held' : '');
+      badge.textContent = item.error ? `[${item.status}: ${item.error}]` : `[${item.status || 'printed'}]`;
 
       top.appendChild(numSpan);
       top.appendChild(titleSpan);
@@ -389,16 +569,15 @@
       const btnPrint = document.createElement('button');
       btnPrint.type = 'button';
       btnPrint.className = 'admin-btn';
-      btnPrint.textContent = item.status === 'postponed' ? 'Print now' : 'Reprint';
+      btnPrint.textContent = item.status === 'printed' ? 'Reprint' : 'Print now';
       btnPrint.addEventListener('click', async () => {
         btnPrint.disabled = true;
         btnPrint.textContent = 'Sending...';
         try {
           await sendItemToPrinter(item);
-          if (item.status === 'postponed') {
-            item.status = 'printed';
-            await persistRemoteState();
-          }
+          item.status = 'printed';
+          delete item.error;
+          await persistRemoteState();
           btnPrint.textContent = 'Sent';
           setTimeout(() => renderAdminUI(), 1000);
         } catch (e) {
@@ -634,34 +813,38 @@
       const printNum = getNextPrintNumber();
       const timeStr = getFormattedTimestamp();
       const postponed = isCurrentlyPostponed();
+      const uid = 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
 
       const itemRecord = {
+        uid,
         num: printNum,
         title: titleVal,
         description: descVal,
         author: authorVal,
         time: timeStr,
-        status: postponed ? 'postponed' : 'printed'
+        status: postponed ? 'postponed' : 'queued'
       };
+
+      // Save immediately to archive first so the idea is NEVER lost even if network/printer hiccups
+      savedItems = mergeSavedItems(savedItems, [itemRecord]);
+      globalTotalPrints = Math.max(globalTotalPrints, itemRecord.num, savedItems.length);
+      globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
+      await persistRemoteState();
 
       if (!postponed) {
         await sendItemToPrinter(itemRecord);
+        await persistRemoteState();
+        // Verify delivery in background & auto-retry if Bluetooth wake-up failed on first attempt
+        verifyPrintDelivery(itemRecord);
       }
-
-      // Save to archive + increment global counter in Cloudflare KV
-      globalTotalPrints = printNum;
-      globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
-      savedItems.push(itemRecord);
-
-      await persistRemoteState();
 
       syncUIQuotaState();
       renderAdminUI();
 
       if (postponed) {
-        setStatus(`Saved (#${printNum} / ${GLOBAL_MAX}) — queued for morning print.`);
+        setStatus(`Saved (#${itemRecord.num} / ${GLOBAL_MAX}) — queued for scheduled print.`);
       } else {
-        setStatus(`Sent to printer (#${printNum} / ${GLOBAL_MAX}).`);
+        setStatus(`Sent to printer (#${itemRecord.num} / ${GLOBAL_MAX}).`);
       }
 
       projectTitle.value = '';
