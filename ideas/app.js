@@ -9,7 +9,7 @@
   const STORAGE_ADMIN_KEY = 'idea_admin_hash_v1';
   const ADMIN_SHA256 = '5f1f508821ed53e6cf4d387514c8a904ca53dcbda1a25b14533a96c8b641f113';
   const GLOBAL_MAX = 400;
-  const USER_MAX = 3;
+  const USER_MAX = 2;
 
   const SAMPLE_TITLE = 'Toaster that catapults toast onto your plate';
   const SAMPLE_DESC = "Finds your plate on the table and launches the toast right onto it when it's done.";
@@ -491,7 +491,7 @@
     const nextNum = getNextPrintNumber();
 
     if (userQuotaText) {
-      userQuotaText.textContent = `${userPrintsRemaining}/${USER_MAX} prints left`;
+      userQuotaText.textContent = `${userPrintsRemaining}/${USER_MAX} prints left for you specifically`;
     }
     if (globalQuotaText) {
       globalQuotaText.textContent = `${globalTotalPrints}/${GLOBAL_MAX} printed`;
@@ -503,7 +503,7 @@
     if (globalPrintsRemaining <= 0) {
       disableFormInputs('400/400 limit reached');
     } else if (userPrintsRemaining <= 0) {
-      disableFormInputs('0/3 prints left');
+      disableFormInputs('0/2 prints left for you');
     } else {
       enableFormInputs();
     }
@@ -698,7 +698,7 @@
       await fetchRemoteQuotaState();
 
       if (userPrintsRemaining <= 0) {
-        setStatus('You have used all 3 prints.', true);
+        setStatus('You have used both of your prints.', true);
         return;
       }
       if (globalPrintsRemaining <= 0) {
