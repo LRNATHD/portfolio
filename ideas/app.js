@@ -4,23 +4,15 @@
   const WORKER_BASE_URL = 'https://realtalk-printer-bridge.super-disk-489b.workers.dev';
   const KV_STATE_ID = 'q_munqdvq7j3od';
   const KV_AUTH = 'noah-realtalk-secret-change-me';
-  const STORAGE_TOKEN_KEY = 'idea_client_token_v1';
-  const STORAGE_LOCAL_COUNT_KEY = 'idea_prints_used_v1';
   const STORAGE_ADMIN_KEY = 'idea_admin_hash_v1';
   const ADMIN_SHA256 = '5f1f508821ed53e6cf4d387514c8a904ca53dcbda1a25b14533a96c8b641f113';
   const GLOBAL_MAX = 400;
-  const USER_MAX = 2;
 
   const SAMPLE_TITLE = 'Toaster that catapults toast onto your plate';
   const SAMPLE_DESC = "Finds your plate on the table and launches the toast right onto it when it's done.";
 
-  let clientToken = getOrCreateClientToken();
-  let hwHash = getHardwareFingerprint();
-  let userPrintsUsed = parseInt(localStorage.getItem(STORAGE_LOCAL_COUNT_KEY) || '0', 10);
-  let userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
   let globalTotalPrints = 0;
   let globalPrintsRemaining = GLOBAL_MAX;
-  let remoteUsersMap = {};
   let savedItems = [];
   let postponeUntil = 0; // 0 = immediate, -1 = hold indefinitely, >0 = epoch ms
   let isSubmitting = false;
@@ -37,7 +29,6 @@
   const statusMsg = document.getElementById('statusMsg');
 
   const globalQuotaText = document.getElementById('globalQuotaText');
-  const userQuotaText = document.getElementById('userQuotaText');
 
   const previewTitle = document.getElementById('previewTitle');
   const previewDescription = document.getElementById('previewDescription');
@@ -111,48 +102,6 @@
     if (isLocal || savedHash === ADMIN_SHA256) {
       adminSection.classList.remove('hidden');
       renderAdminUI();
-    }
-  }
-
-  function getOrCreateClientToken() {
-    let token = localStorage.getItem(STORAGE_TOKEN_KEY);
-    if (!token) {
-      token = 'u_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-      try {
-        localStorage.setItem(STORAGE_TOKEN_KEY, token);
-      } catch (ignored) {}
-    }
-    return token;
-  }
-
-  function getHardwareFingerprint() {
-    try {
-      let glRenderer = '';
-      const c = document.createElement('canvas');
-      const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
-      if (gl) {
-        const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-        if (dbg) {
-          glRenderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '';
-        }
-      }
-      const raw = [
-        navigator.platform || '',
-        screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
-        navigator.hardwareConcurrency || '',
-        navigator.deviceMemory || '',
-        Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-        glRenderer
-      ].join('|');
-
-      let hash = 2166136261;
-      for (let i = 0; i < raw.length; i++) {
-        hash ^= raw.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-      }
-      return 'hw_' + (hash >>> 0).toString(36);
-    } catch (e) {
-      return 'hw_default';
     }
   }
 
@@ -251,19 +200,6 @@
           if (Array.isArray(parsed.items)) {
             savedItems = parsed.items;
           }
-          if (parsed.users && typeof parsed.users === 'object') {
-            remoteUsersMap = parsed.users;
-            const remoteUsed = Math.max(
-              remoteUsersMap[clientToken] || 0,
-              remoteUsersMap[hwHash] || 0
-            );
-            if (remoteUsed > userPrintsUsed) {
-              userPrintsUsed = remoteUsed;
-              try {
-                localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
-              } catch (ignored) {}
-            }
-          }
         }
       }
     } catch (ignored) {}
@@ -275,7 +211,6 @@
     const statePayload = JSON.stringify({
       total: globalTotalPrints,
       postponeUntil,
-      users: remoteUsersMap,
       items: savedItems
     });
 
@@ -486,13 +421,9 @@
   }
 
   function syncUIQuotaState() {
-    userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
     globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
     const nextNum = getNextPrintNumber();
 
-    if (userQuotaText) {
-      userQuotaText.textContent = `${userPrintsRemaining}/${USER_MAX} prints left for you specifically`;
-    }
     if (globalQuotaText) {
       globalQuotaText.textContent = `${globalTotalPrints}/${GLOBAL_MAX} printed`;
     }
@@ -502,8 +433,6 @@
 
     if (globalPrintsRemaining <= 0) {
       disableFormInputs('400/400 limit reached');
-    } else if (userPrintsRemaining <= 0) {
-      disableFormInputs('0/2 prints left for you');
     } else {
       enableFormInputs();
     }
@@ -697,10 +626,6 @@
     try {
       await fetchRemoteQuotaState();
 
-      if (userPrintsRemaining <= 0) {
-        setStatus('You have used both of your prints.', true);
-        return;
-      }
       if (globalPrintsRemaining <= 0) {
         setStatus('400 print limit reached.', true);
         return;
@@ -723,19 +648,10 @@
         await sendItemToPrinter(itemRecord);
       }
 
-      // Save to archive + increment counters in Cloudflare KV
+      // Save to archive + increment global counter in Cloudflare KV
       globalTotalPrints = printNum;
       globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
-      userPrintsUsed = Math.min(USER_MAX, userPrintsUsed + 1);
-      userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
-
-      remoteUsersMap[clientToken] = userPrintsUsed;
-      remoteUsersMap[hwHash] = userPrintsUsed;
       savedItems.push(itemRecord);
-
-      try {
-        localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
-      } catch (ignored) {}
 
       await persistRemoteState();
 
