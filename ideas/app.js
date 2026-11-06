@@ -2,6 +2,8 @@
   'use strict';
 
   const WORKER_BASE_URL = 'https://realtalk-printer-bridge.super-disk-489b.workers.dev';
+  const KV_STATE_ID = 'q_munqdvq7j3od';
+  const KV_AUTH = 'noah-realtalk-secret-change-me';
   const STORAGE_TOKEN_KEY = 'idea_client_token_v1';
   const STORAGE_LOCAL_COUNT_KEY = 'idea_prints_used_v1';
   const GLOBAL_MAX = 400;
@@ -11,10 +13,12 @@
   const SAMPLE_DESC = "Finds your plate on the table and launches the toast right onto it when it's done.";
 
   let clientToken = getOrCreateClientToken();
+  let hwHash = getHardwareFingerprint();
   let userPrintsUsed = parseInt(localStorage.getItem(STORAGE_LOCAL_COUNT_KEY) || '0', 10);
   let userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
-  let globalPrintsRemaining = GLOBAL_MAX;
   let globalTotalPrints = 0;
+  let globalPrintsRemaining = GLOBAL_MAX;
+  let remoteUsersMap = {};
   let isSubmitting = false;
 
   const form = document.getElementById('ideaForm');
@@ -40,19 +44,50 @@
     setupEventListeners();
     updateLiveTimestamp();
     syncUIQuotaState();
-    fetchRemoteQuotaConfig();
+    fetchRemoteQuotaState();
     setInterval(updateLiveTimestamp, 15000);
   }
 
   function getOrCreateClientToken() {
     let token = localStorage.getItem(STORAGE_TOKEN_KEY);
     if (!token) {
-      token = 'cl_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+      token = 'u_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
       try {
         localStorage.setItem(STORAGE_TOKEN_KEY, token);
       } catch (ignored) {}
     }
     return token;
+  }
+
+  function getHardwareFingerprint() {
+    try {
+      let glRenderer = '';
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (gl) {
+        const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+        if (dbg) {
+          glRenderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '';
+        }
+      }
+      const raw = [
+        navigator.platform || '',
+        screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+        navigator.hardwareConcurrency || '',
+        navigator.deviceMemory || '',
+        Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        glRenderer
+      ].join('|');
+
+      let hash = 2166136261;
+      for (let i = 0; i < raw.length; i++) {
+        hash ^= raw.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return 'hw_' + (hash >>> 0).toString(36);
+    } catch (e) {
+      return 'hw_default';
+    }
   }
 
   function setupEventListeners() {
@@ -77,27 +112,55 @@
     form.addEventListener('submit', handleSubmit);
   }
 
-  async function fetchRemoteQuotaConfig() {
+  async function fetchRemoteQuotaState() {
     try {
-      const res = await fetch(`${WORKER_BASE_URL}/api/ideas/config?clientId=${encodeURIComponent(clientToken)}&t=${Date.now()}`);
+      const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${KV_STATE_ID}&t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       if (res.ok) {
         const data = await res.json();
-        if (typeof data.globalRemaining === 'number') {
-          globalPrintsRemaining = data.globalRemaining;
-          globalTotalPrints = typeof data.globalTotal === 'number'
-            ? data.globalTotal
-            : (GLOBAL_MAX - data.globalRemaining);
+        if (data && typeof data.error === 'string' && data.error.startsWith('{')) {
+          const parsed = JSON.parse(data.error);
+          if (typeof parsed.total === 'number') {
+            globalTotalPrints = Math.max(0, Math.min(GLOBAL_MAX, parsed.total));
+            globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
+          }
+          if (parsed.users && typeof parsed.users === 'object') {
+            remoteUsersMap = parsed.users;
+            const remoteUsed = Math.max(
+              remoteUsersMap[clientToken] || 0,
+              remoteUsersMap[hwHash] || 0
+            );
+            if (remoteUsed > userPrintsUsed) {
+              userPrintsUsed = remoteUsed;
+              try {
+                localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
+              } catch (ignored) {}
+            }
+          }
         }
-        if (typeof data.userRemaining === 'number') {
-          userPrintsRemaining = Math.min(userPrintsRemaining, data.userRemaining);
-          userPrintsUsed = USER_MAX - userPrintsRemaining;
-          localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
-        }
-        syncUIQuotaState();
       }
-    } catch (ignored) {
-      syncUIQuotaState();
-    }
+    } catch (ignored) {}
+    syncUIQuotaState();
+  }
+
+  async function saveRemoteQuotaState(newTotal, newUserUsed) {
+    remoteUsersMap[clientToken] = newUserUsed;
+    remoteUsersMap[hwHash] = newUserUsed;
+    const statePayload = JSON.stringify({
+      total: newTotal,
+      users: remoteUsersMap
+    });
+
+    await fetch(`${WORKER_BASE_URL}/api/quote/ack?secret=${encodeURIComponent(KV_AUTH)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: KV_STATE_ID,
+        status: 'printed',
+        error: statePayload
+      })
+    });
   }
 
   function getNextPrintNumber() {
@@ -106,6 +169,7 @@
 
   function syncUIQuotaState() {
     userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
+    globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
     const nextNum = getNextPrintNumber();
 
     if (userQuotaText) {
@@ -164,10 +228,6 @@
     statusMsg.classList.toggle('error', isError);
   }
 
-  /**
-   * Word-wraps text on a 2D canvas context, respecting explicit newlines
-   * and breaking overly long single tokens if needed.
-   */
   function wrapCanvasText(ctx, text, maxWidth) {
     const lines = [];
     const paragraphs = String(text || '').replace(/\r\n/g, '\n').split('\n');
@@ -181,7 +241,6 @@
       let currentLine = '';
 
       for (const word of words) {
-        // If a single word is wider than maxWidth, slice it character by character
         if (ctx.measureText(word).width > maxWidth) {
           if (currentLine) {
             lines.push(currentLine);
@@ -216,11 +275,6 @@
     return lines;
   }
 
-  /**
-   * Renders the exact 5-field preview card onto an 800x1200 (203 DPI 4x6")
-   * 1-bit monochrome bitmap in < 2ms so the printer outputs the exact preview
-   * with zero extra headers, barcodes, or metadata.
-   */
   function renderLabelBitmap(title, description, handle, timeStr, printNum) {
     const W = 800;
     const H = 1200;
@@ -232,7 +286,6 @@
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    // Pure white paper background
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, W, H);
 
@@ -284,7 +337,6 @@
     ctx.textAlign = 'right';
     ctx.fillText(`#${printNum} / ${GLOBAL_MAX}`, W - PAD, 1106);
 
-    // Strict 1-bit monochrome threshold for crisp thermal dots & fast empty-band skipping
     const imgData = ctx.getImageData(0, 0, W, H);
     const d = imgData.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -303,15 +355,6 @@
   async function handleSubmit(e) {
     e.preventDefault();
     if (isSubmitting) return;
-
-    if (userPrintsRemaining <= 0) {
-      setStatus('You have used all 3 prints.', true);
-      return;
-    }
-    if (globalPrintsRemaining <= 0) {
-      setStatus('400 print limit reached.', true);
-      return;
-    }
 
     const titleVal = projectTitle.value.trim();
     const descVal = projectDescription.value.trim();
@@ -333,66 +376,55 @@
     btnSubmitIdea.textContent = 'Printing...';
     setStatus('');
 
-    const printNum = getNextPrintNumber();
-    const timeStr = getFormattedTimestamp();
-    const labelImageData = renderLabelBitmap(titleVal, descVal, authorVal, timeStr, printNum);
-
     try {
-      let res = await fetch(`${WORKER_BASE_URL}/api/ideas/submit`, {
+      // Sync latest global & user count from Cloudflare KV before printing
+      await fetchRemoteQuotaState();
+
+      if (userPrintsRemaining <= 0) {
+        setStatus('You have used all 3 prints.', true);
+        return;
+      }
+      if (globalPrintsRemaining <= 0) {
+        setStatus('400 print limit reached.', true);
+        return;
+      }
+
+      const printNum = getNextPrintNumber();
+      const timeStr = getFormattedTimestamp();
+      const labelImageData = renderLabelBitmap(titleVal, descVal, authorVal, timeStr, printNum);
+
+      const res = await fetch(`${WORKER_BASE_URL}/api/quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: titleVal,
-          description: descVal,
+          type: 'idea',
+          text: `${titleVal} - ${descVal}`,
           author: authorVal,
-          printNumber: printNum,
           imageData: labelImageData,
-          clientId: clientToken
+          speed: 2.0,
+          density: 12
         })
       });
-
-      if (res.status === 404) {
-        res = await fetch(`${WORKER_BASE_URL}/api/quote`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'idea',
-            text: `${titleVal} - ${descVal}`,
-            author: authorVal,
-            imageData: labelImageData,
-            speed: 2.0,
-            density: 12
-          })
-        });
-      }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `Error ${res.status}`);
       }
 
-      const result = await res.json();
+      // Increment and persist to Cloudflare KV globally + localStorage
+      globalTotalPrints = printNum;
+      globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
+      userPrintsUsed = Math.min(USER_MAX, userPrintsUsed + 1);
+      userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
 
-      userPrintsUsed++;
-      localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
+      try {
+        localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
+      } catch (ignored) {}
 
-      if (typeof result.userRemaining === 'number') {
-        userPrintsRemaining = result.userRemaining;
-      } else {
-        userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
-      }
+      await saveRemoteQuotaState(globalTotalPrints, userPrintsUsed);
 
-      if (typeof result.globalTotal === 'number') {
-        globalTotalPrints = result.globalTotal;
-        globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
-      } else {
-        globalTotalPrints = Math.min(GLOBAL_MAX, globalTotalPrints + 1);
-        globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
-      }
-
-      const printedNum = result.printNumber || globalTotalPrints;
       syncUIQuotaState();
-      setStatus(`Sent to printer (#${printedNum} / ${GLOBAL_MAX}).`);
+      setStatus(`Sent to printer (#${printNum} / ${GLOBAL_MAX}).`);
 
       projectTitle.value = '';
       projectDescription.value = '';
