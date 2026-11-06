@@ -6,7 +6,8 @@
   const KV_AUTH = 'noah-realtalk-secret-change-me';
   const STORAGE_TOKEN_KEY = 'idea_client_token_v1';
   const STORAGE_LOCAL_COUNT_KEY = 'idea_prints_used_v1';
-  const STORAGE_ADMIN_KEY = 'idea_admin_unlocked_v1';
+  const STORAGE_ADMIN_KEY = 'idea_admin_hash_v1';
+  const ADMIN_SHA256 = '5f1f508821ed53e6cf4d387514c8a904ca53dcbda1a25b14533a96c8b641f113';
   const GLOBAL_MAX = 400;
   const USER_MAX = 3;
 
@@ -74,34 +75,42 @@
     }, 25000);
   }
 
-  function initAdminAccess() {
-    const host = window.location.hostname;
-    const params = new URLSearchParams(window.location.search);
-    const isLocal = host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:';
-    const hasKey = params.get('key') === 'noah-local-admin' || params.get('admin') === '1';
-    const savedAdmin = localStorage.getItem(STORAGE_ADMIN_KEY) === '1';
+  async function sha256Hex(str) {
+    const buf = new TextEncoder().encode(str);
+    const digest = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(digest))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
 
-    if (isLocal || hasKey || savedAdmin) {
-      if (hasKey) {
-        try { localStorage.setItem(STORAGE_ADMIN_KEY, '1'); } catch (e) {}
-      }
-      adminSection.classList.remove('hidden');
+  async function initAdminAccess() {
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:';
+    const params = new URLSearchParams(window.location.search);
+    const adminParam = params.get('admin');
+
+    if (adminParam === 'off' || adminParam === 'logout') {
+      try { localStorage.removeItem(STORAGE_ADMIN_KEY); } catch (e) {}
+      adminSection.classList.add('hidden');
+      try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+      return;
     }
 
-    if (btnAdminToggle) {
-      btnAdminToggle.addEventListener('click', () => {
-        if (!adminSection.classList.contains('hidden')) {
-          adminSection.classList.add('hidden');
-          try { localStorage.removeItem(STORAGE_ADMIN_KEY); } catch (e) {}
-          return;
-        }
-        const pin = prompt('Admin key:');
-        if (pin === 'noah' || pin === 'noah-local-admin' || pin === KV_AUTH) {
-          try { localStorage.setItem(STORAGE_ADMIN_KEY, '1'); } catch (e) {}
-          adminSection.classList.remove('hidden');
-          renderAdminUI();
-        }
-      });
+    if (adminParam) {
+      const paramHash = await sha256Hex(adminParam);
+      if (paramHash === ADMIN_SHA256) {
+        try { localStorage.setItem(STORAGE_ADMIN_KEY, paramHash); } catch (e) {}
+        adminSection.classList.remove('hidden');
+        renderAdminUI();
+      }
+      try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+      return;
+    }
+
+    const savedHash = localStorage.getItem(STORAGE_ADMIN_KEY);
+    if (isLocal || savedHash === ADMIN_SHA256) {
+      adminSection.classList.remove('hidden');
+      renderAdminUI();
     }
   }
 
