@@ -13,6 +13,16 @@ import html2canvas from 'html2canvas';
 (function () {
   'use strict';
 
+  // Restrict access to local machine requests only (requests not coming from Noah's computer are blocked)
+  const isLocalHost = window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '[::1]' ||
+    window.location.protocol === 'file:';
+  const ownerKey = new URLSearchParams(window.location.search).get('key') || localStorage.getItem('realtalk_owner_key');
+  if (!isLocalHost && ownerKey !== 'noah-local-admin') {
+    return;
+  }
+
   if (window.__REALTALK_INITIALIZED__) return;
   window.__REALTALK_INITIALIZED__ = true;
 

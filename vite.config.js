@@ -10,6 +10,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         'PCB-CNC-Multitool': resolve(__dirname, 'PCB-CNC-Multitool/index.html'),
         'realtalk': resolve(__dirname, 'realtalk/index.html'),
+        'ideas': resolve(__dirname, 'ideas/index.html'),
       },
     },
   },

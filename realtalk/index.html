@@ -5,6 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>RealTalk // Transmission Terminal</title>
   <meta name="description" content="Design and manifest physical artifacts, notes, and graphics directly onto Noah's desk in real time." />
+  <script>
+    (function () {
+      try {
+        var h = window.location.hostname;
+        var isLocal = h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || window.location.protocol === 'file:';
+        var params = new URLSearchParams(window.location.search);
+        var key = params.get('key') || localStorage.getItem('realtalk_owner_key');
+        if (key === 'noah-local-admin') {
+          try { localStorage.setItem('realtalk_owner_key', 'noah-local-admin'); } catch (e) {}
+          isLocal = true;
+        }
+        if (!isLocal) {
+          window.stop && window.stop();
+          document.documentElement.innerHTML = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#fff;color:#111;padding:48px;max-width:600px;margin:0 auto;line-height:1.5;}h1{font-size:24px;margin-bottom:8px;}p{color:#555;font-size:15px;}hr{border:none;border-top:1px solid #eee;margin:24px 0;}small{color:#888;font-size:12px;}</style></head><body><h1>404 Not Found</h1><p>The requested URL was not found on this server.</p><hr><small>Apache Server at ' + (h || 'noahsmith.dev') + ' Port 443</small></body></html>';
+          throw new Error('Access restricted: local machine only');
+        }
+      } catch (e) {
+        if (e.message && e.message.indexOf('Access restricted') !== -1) throw e;
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />

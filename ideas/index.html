@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Project Idea Dispatch // Noah Smith</title>
+  <meta name="description" content="Submit hardware, electronics, or software project ideas. Submissions physically print out on Noah's desk thermal printer in real time." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="ideas-root">
+    <!-- Top Navigation Header -->
+    <header class="ideas-header">
+      <div class="header-left">
+        <a href="/" class="header-home-link" title="Return to noahsmith.dev">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>noahsmith.dev</span>
+        </a>
+        <span class="header-separator">/</span>
+        <h1 class="header-title">Idea Dispatch</h1>
+      </div>
+
+      <div class="header-right">
+        <!-- Global Print Counter (Hard Limit 400) -->
+        <div class="quota-pill global-quota" id="globalQuotaPill" title="Hard system limit across all visitors">
+          <span class="quota-dot pulse"></span>
+          <span id="globalQuotaText">Capacity: ... / 400</span>
+        </div>
+
+        <!-- Personal Limit Pill (Limit 3 per person) -->
+        <div class="quota-pill user-quota" id="userQuotaPill" title="Your personal submission allocation">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span id="userQuotaText">Allocation: 3 of 3</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Workspace -->
+    <main class="ideas-workspace">
+      <div class="ideas-layout">
+        
+        <!-- Left: Submission Form -->
+        <section class="ideas-form-panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Drop a Project Idea onto My Desk</h2>
+            <p class="panel-desc">
+              Have an electronics, hardware, robotics, or software project idea you'd like to see built?
+              Submit it here and it will physically materialize on my desk thermal printer.
+            </p>
+          </div>
+
+          <!-- Limit Exhausted Banner (shown when 3/3 used) -->
+          <div id="limitReachedBanner" class="alert-banner warning hidden">
+            <div class="banner-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <div class="banner-text">
+              <strong>All 3 Prints Claimed</strong>
+              <span>You have submitted your 3 allowed project ideas. Thank you for the creative suggestions!</span>
+            </div>
+          </div>
+
+          <!-- Global 400 Limit Reached Banner -->
+          <div id="globalLimitBanner" class="alert-banner error hidden">
+            <div class="banner-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+            </div>
+            <div class="banner-text">
+              <strong>400-Print Global Capacity Reached</strong>
+              <span>Submissions are now closed. The thermal paper allocation is fully printed.</span>
+            </div>
+          </div>
+
+          <form id="ideaForm" class="ideas-form" novalidate>
+            <!-- Project Title Input -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="projectTitle" class="form-label">Project Title <span class="required">*</span></label>
+                <span class="char-counter" id="titleCharCount">0 / 80</span>
+              </div>
+              <input
+                type="text"
+                id="projectTitle"
+                class="form-input"
+                placeholder="e.g. Solar-Powered LoRa Mesh Sensor Node"
+                maxlength="80"
+                autocomplete="off"
+                required
+              />
+            </div>
+
+            <!-- Project Description Input -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="projectDescription" class="form-label">Project Description &amp; Details <span class="required">*</span></label>
+                <span class="char-counter" id="descCharCount">0 / 500</span>
+              </div>
+              <textarea
+                id="projectDescription"
+                class="form-textarea"
+                rows="5"
+                placeholder="What does it do? What chips or components should it use? What makes it interesting or useful? Describe the concept..."
+                maxlength="500"
+                required
+              ></textarea>
+            </div>
+
+            <!-- Author / Submitter Handle (Optional) -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="projectAuthor" class="form-label">Your Name or Handle <span class="optional">(Optional)</span></label>
+                <span class="char-counter" id="authorCharCount">0 / 35</span>
+              </div>
+              <input
+                type="text"
+                id="projectAuthor"
+                class="form-input"
+                placeholder="@yourhandle or Name (default: Anonymous)"
+                maxlength="35"
+                autocomplete="off"
+              />
+            </div>
+
+            <!-- Submit Action Button -->
+            <div class="form-actions">
+              <button type="submit" id="btnSubmitIdea" class="btn-submit-idea">
+                <span class="btn-icon">⚡</span>
+                <span class="btn-text" id="btnSubmitText">Print Idea to Noah's Desk</span>
+              </button>
+            </div>
+
+            <!-- Security & Speed Footnote -->
+            <div class="form-footnote">
+              <div class="footnote-item">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                <span>Zero tracking &bull; Anonymous transmission</span>
+              </div>
+              <div class="footnote-item">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                <span>Ultra-fast native text print (~0.1s transmission)</span>
+              </div>
+              <div class="footnote-item">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>Hard limit 400 total &bull; 3 per visitor</span>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <!-- Right: Live Thermal Printout Preview -->
+        <section class="ideas-preview-panel">
+          <div class="preview-header">
+            <div class="preview-badge">
+              <span class="pulse-indicator"></span>
+              <span>LIVE THERMAL PREVIEW</span>
+            </div>
+            <span class="preview-hint">What will physically materialize</span>
+          </div>
+
+          <!-- Physical 4x6" Thermal Label Simulator -->
+          <div class="thermal-card-wrapper">
+            <div class="thermal-card" id="thermalPreviewCard">
+              <!-- Top Header Bar -->
+              <div class="thermal-card-header">
+                <span class="card-brand">PROJECT IDEA DISPATCH</span>
+                <span class="card-feed">LIVE FEED</span>
+              </div>
+              <div class="thermal-divider solid"></div>
+
+              <!-- Barcode & Subtitle -->
+              <div class="thermal-barcode-area">
+                <div class="mock-barcode" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="barcode-subtext">* LIVE DESK TRANSMISSION *</div>
+              </div>
+              <div class="thermal-divider dashed"></div>
+
+              <!-- Title Section -->
+              <div class="thermal-section">
+                <div class="section-tag">PROJECT TITLE:</div>
+                <div class="thermal-title" id="previewTitle">Solar-Powered LoRa Mesh Sensor Node</div>
+              </div>
+
+              <!-- Description Section -->
+              <div class="thermal-section flex-grow">
+                <div class="section-tag">DESCRIPTION &amp; DETAILS:</div>
+                <div class="thermal-description" id="previewDescription">
+                  An outdoor ESP32-S3 or CH572 node with low-power solar charging that broadcasts environmental telemetry across a decentralized mesh network.
+                </div>
+              </div>
+
+              <!-- Author Attribution -->
+              <div class="thermal-author-row">
+                <span class="author-label">SUBMITTED BY:</span>
+                <span class="author-name" id="previewAuthor">- Anonymous</span>
+              </div>
+
+              <div class="thermal-divider solid"></div>
+
+              <!-- Metadata Footer -->
+              <div class="thermal-footer">
+                <div class="meta-row">
+                  <span>PRINTED:</span>
+                  <span id="previewTimestamp">2026-11-06 03:00 UTC</span>
+                </div>
+                <div class="meta-row">
+                  <span>DISPATCH:</span>
+                  <span id="previewSlot">PRINT #1 OF 3 ALLOCATED</span>
+                </div>
+                <div class="meta-row">
+                  <span>MANIFEST:</span>
+                  <span>PHYSICAL DESK THERMAL PRINTHEAD</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Perforation simulation at bottom of label -->
+            <div class="perforation-edge" aria-hidden="true"></div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Transmission Status Modal -->
+    <div id="statusModal" class="status-modal-backdrop hidden">
+      <div class="status-modal-dialog">
+        <div class="modal-spinner-wrap">
+          <div class="modal-spinner" id="modalSpinner"></div>
+        </div>
+
+        <h3 id="modalTitle" class="modal-title">Transmitting Idea...</h3>
+        <p id="modalDesc" class="modal-desc">Relaying pure text payload to desk printhead queue...</p>
+
+        <div class="modal-progress-track">
+          <div id="modalProgressBar" class="modal-progress-bar"></div>
+        </div>
+
+        <div class="modal-stats" id="modalStats">
+          <div class="modal-stat-pill">
+            <span class="stat-label">Prints Remaining:</span>
+            <span class="stat-val" id="modalUserRemaining">2 of 3</span>
+          </div>
+          <div class="modal-stat-pill">
+            <span class="stat-label">Global Quota:</span>
+            <span class="stat-val" id="modalGlobalRemaining">388 / 400</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <span id="modalJobId" class="modal-job-id">Job ID: &mdash;</span>
+          <button type="button" id="modalCloseBtn" class="btn-modal-close hidden">Submit Another</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
