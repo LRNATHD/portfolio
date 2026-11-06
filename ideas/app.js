@@ -6,6 +6,7 @@
   const KV_AUTH = 'noah-realtalk-secret-change-me';
   const STORAGE_TOKEN_KEY = 'idea_client_token_v1';
   const STORAGE_LOCAL_COUNT_KEY = 'idea_prints_used_v1';
+  const STORAGE_ADMIN_KEY = 'idea_admin_unlocked_v1';
   const GLOBAL_MAX = 400;
   const USER_MAX = 3;
 
@@ -19,7 +20,10 @@
   let globalTotalPrints = 0;
   let globalPrintsRemaining = GLOBAL_MAX;
   let remoteUsersMap = {};
+  let savedItems = [];
+  let postponeUntil = 0; // 0 = immediate, -1 = hold indefinitely, >0 = epoch ms
   let isSubmitting = false;
+  let isFlushing = false;
 
   const form = document.getElementById('ideaForm');
   const projectTitle = document.getElementById('projectTitle');
@@ -40,12 +44,65 @@
   const previewTimestamp = document.getElementById('previewTimestamp');
   const previewNumber = document.getElementById('previewNumber');
 
+  // Admin DOM
+  const btnAdminToggle = document.getElementById('btnAdminToggle');
+  const adminSection = document.getElementById('adminSection');
+  const postponeStateLabel = document.getElementById('postponeStateLabel');
+  const postponeInput = document.getElementById('postponeInput');
+  const btnSetPostpone = document.getElementById('btnSetPostpone');
+  const btnSleep9am = document.getElementById('btnSleep9am');
+  const btnSleep8h = document.getElementById('btnSleep8h');
+  const btnHoldIndef = document.getElementById('btnHoldIndef');
+  const btnResumeNow = document.getElementById('btnResumeNow');
+  const archiveCountTitle = document.getElementById('archiveCountTitle');
+  const archiveList = document.getElementById('archiveList');
+  const btnExportJson = document.getElementById('btnExportJson');
+
   function init() {
     setupEventListeners();
+    initAdminAccess();
     updateLiveTimestamp();
     syncUIQuotaState();
-    fetchRemoteQuotaState();
+    fetchRemoteQuotaState().then(() => {
+      checkAndFlushPostponed();
+    });
     setInterval(updateLiveTimestamp, 15000);
+    setInterval(() => {
+      fetchRemoteQuotaState().then(() => {
+        checkAndFlushPostponed();
+      });
+    }, 25000);
+  }
+
+  function initAdminAccess() {
+    const host = window.location.hostname;
+    const params = new URLSearchParams(window.location.search);
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:';
+    const hasKey = params.get('key') === 'noah-local-admin' || params.get('admin') === '1';
+    const savedAdmin = localStorage.getItem(STORAGE_ADMIN_KEY) === '1';
+
+    if (isLocal || hasKey || savedAdmin) {
+      if (hasKey) {
+        try { localStorage.setItem(STORAGE_ADMIN_KEY, '1'); } catch (e) {}
+      }
+      adminSection.classList.remove('hidden');
+    }
+
+    if (btnAdminToggle) {
+      btnAdminToggle.addEventListener('click', () => {
+        if (!adminSection.classList.contains('hidden')) {
+          adminSection.classList.add('hidden');
+          try { localStorage.removeItem(STORAGE_ADMIN_KEY); } catch (e) {}
+          return;
+        }
+        const pin = prompt('Admin key:');
+        if (pin === 'noah' || pin === 'noah-local-admin' || pin === KV_AUTH) {
+          try { localStorage.setItem(STORAGE_ADMIN_KEY, '1'); } catch (e) {}
+          adminSection.classList.remove('hidden');
+          renderAdminUI();
+        }
+      });
+    }
   }
 
   function getOrCreateClientToken() {
@@ -110,6 +167,60 @@
     });
 
     form.addEventListener('submit', handleSubmit);
+
+    if (btnSetPostpone) {
+      btnSetPostpone.addEventListener('click', async () => {
+        if (!postponeInput.value) return;
+        const ts = new Date(postponeInput.value).getTime();
+        if (!isNaN(ts) && ts > Date.now()) {
+          await updatePostponeSchedule(ts);
+        } else {
+          await updatePostponeSchedule(0);
+        }
+      });
+    }
+
+    if (btnSleep9am) {
+      btnSleep9am.addEventListener('click', async () => {
+        const d = new Date();
+        if (d.getHours() >= 9) {
+          d.setDate(d.getDate() + 1);
+        }
+        d.setHours(9, 0, 0, 0);
+        await updatePostponeSchedule(d.getTime());
+      });
+    }
+
+    if (btnSleep8h) {
+      btnSleep8h.addEventListener('click', async () => {
+        await updatePostponeSchedule(Date.now() + 8 * 3600 * 1000);
+      });
+    }
+
+    if (btnHoldIndef) {
+      btnHoldIndef.addEventListener('click', async () => {
+        await updatePostponeSchedule(-1);
+      });
+    }
+
+    if (btnResumeNow) {
+      btnResumeNow.addEventListener('click', async () => {
+        await updatePostponeSchedule(0);
+        await flushAllPostponedNow();
+      });
+    }
+
+    if (btnExportJson) {
+      btnExportJson.addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(savedItems, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ideas-backup-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
   }
 
   async function fetchRemoteQuotaState() {
@@ -124,6 +235,12 @@
           if (typeof parsed.total === 'number') {
             globalTotalPrints = Math.max(0, Math.min(GLOBAL_MAX, parsed.total));
             globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
+          }
+          if (typeof parsed.postponeUntil === 'number') {
+            postponeUntil = parsed.postponeUntil;
+          }
+          if (Array.isArray(parsed.items)) {
+            savedItems = parsed.items;
           }
           if (parsed.users && typeof parsed.users === 'object') {
             remoteUsersMap = parsed.users;
@@ -142,14 +259,15 @@
       }
     } catch (ignored) {}
     syncUIQuotaState();
+    renderAdminUI();
   }
 
-  async function saveRemoteQuotaState(newTotal, newUserUsed) {
-    remoteUsersMap[clientToken] = newUserUsed;
-    remoteUsersMap[hwHash] = newUserUsed;
+  async function persistRemoteState() {
     const statePayload = JSON.stringify({
-      total: newTotal,
-      users: remoteUsersMap
+      total: globalTotalPrints,
+      postponeUntil,
+      users: remoteUsersMap,
+      items: savedItems
     });
 
     await fetch(`${WORKER_BASE_URL}/api/quote/ack?secret=${encodeURIComponent(KV_AUTH)}`, {
@@ -161,6 +279,197 @@
         error: statePayload
       })
     });
+  }
+
+  async function updatePostponeSchedule(newPostponeUntil) {
+    await fetchRemoteQuotaState();
+    postponeUntil = newPostponeUntil;
+    await persistRemoteState();
+    renderAdminUI();
+  }
+
+  function isCurrentlyPostponed() {
+    if (postponeUntil === -1) return true;
+    if (postponeUntil > 0 && Date.now() < postponeUntil) return true;
+    return false;
+  }
+
+  async function checkAndFlushPostponed() {
+    if (isFlushing) return;
+    if (postponeUntil === -1) return;
+    if (postponeUntil > 0 && Date.now() < postponeUntil) return;
+
+    const held = savedItems.filter(it => it.status === 'postponed');
+    if (held.length === 0) {
+      if (postponeUntil > 0 && Date.now() >= postponeUntil) {
+        postponeUntil = 0;
+        await persistRemoteState();
+        renderAdminUI();
+      }
+      return;
+    }
+
+    await flushAllPostponedNow();
+  }
+
+  async function flushAllPostponedNow() {
+    if (isFlushing) return;
+    isFlushing = true;
+    try {
+      await fetchRemoteQuotaState();
+      const held = savedItems.filter(it => it.status === 'postponed');
+      if (held.length === 0) {
+        postponeUntil = 0;
+        await persistRemoteState();
+        renderAdminUI();
+        return;
+      }
+
+      // Mark as printed in KV first to prevent duplicate flushes
+      for (const item of held) {
+        item.status = 'printed';
+      }
+      postponeUntil = 0;
+      await persistRemoteState();
+      renderAdminUI();
+
+      for (const item of held) {
+        await sendItemToPrinter(item);
+      }
+    } catch (e) {
+      console.error('Flush error:', e);
+    } finally {
+      isFlushing = false;
+      renderAdminUI();
+    }
+  }
+
+  async function sendItemToPrinter(item) {
+    const bmp = renderLabelBitmap(item.title, item.description, item.author, item.time, item.num);
+    const res = await fetch(`${WORKER_BASE_URL}/api/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'idea',
+        text: `${item.title} - ${item.description}`,
+        author: item.author,
+        imageData: bmp,
+        speed: 2.0,
+        density: 12
+      })
+    });
+    if (!res.ok) {
+      throw new Error(`Printer queue error ${res.status}`);
+    }
+  }
+
+  function renderAdminUI() {
+    if (!adminSection || adminSection.classList.contains('hidden')) return;
+
+    const heldCount = savedItems.filter(it => it.status === 'postponed').length;
+
+    if (postponeUntil === -1) {
+      postponeStateLabel.textContent = `Held indefinitely (${heldCount} queued)`;
+    } else if (postponeUntil > Date.now()) {
+      const dt = new Date(postponeUntil);
+      const timeStr = dt.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      postponeStateLabel.textContent = `Postponed until ${timeStr} (${heldCount} queued)`;
+    } else {
+      postponeStateLabel.textContent = heldCount > 0
+        ? `Ready to release (${heldCount} queued)`
+        : 'Printing immediately';
+    }
+
+    if (archiveCountTitle) {
+      archiveCountTitle.textContent = `Saved Prints (${savedItems.length})`;
+    }
+
+    if (!archiveList) return;
+    archiveList.innerHTML = '';
+
+    const sorted = [...savedItems].sort((a, b) => b.num - a.num);
+    for (const item of sorted) {
+      const row = document.createElement('div');
+      row.className = 'archive-item';
+
+      const info = document.createElement('div');
+      info.className = 'archive-info';
+
+      const top = document.createElement('div');
+      top.className = 'archive-top';
+
+      const numSpan = document.createElement('span');
+      numSpan.className = 'archive-num';
+      numSpan.textContent = `#${item.num}/400`;
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'archive-item-title';
+      titleSpan.textContent = item.title;
+
+      const badge = document.createElement('span');
+      badge.className = 'archive-badge' + (item.status === 'postponed' ? ' held' : '');
+      badge.textContent = `[${item.status || 'printed'}]`;
+
+      top.appendChild(numSpan);
+      top.appendChild(titleSpan);
+      top.appendChild(badge);
+
+      const descDiv = document.createElement('div');
+      descDiv.className = 'archive-item-desc';
+      descDiv.textContent = item.description;
+
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'archive-meta';
+      metaDiv.textContent = `${item.author} · ${item.time}`;
+
+      info.appendChild(top);
+      info.appendChild(descDiv);
+      info.appendChild(metaDiv);
+
+      const btns = document.createElement('div');
+      btns.className = 'archive-btns';
+
+      const btnPrev = document.createElement('button');
+      btnPrev.type = 'button';
+      btnPrev.className = 'admin-btn';
+      btnPrev.textContent = 'Preview';
+      btnPrev.addEventListener('click', () => {
+        previewTitle.textContent = item.title;
+        previewDescription.textContent = item.description;
+        previewAuthor.textContent = item.author;
+        previewTimestamp.textContent = item.time;
+        previewNumber.textContent = `#${item.num} / ${GLOBAL_MAX}`;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      const btnPrint = document.createElement('button');
+      btnPrint.type = 'button';
+      btnPrint.className = 'admin-btn';
+      btnPrint.textContent = item.status === 'postponed' ? 'Print now' : 'Reprint';
+      btnPrint.addEventListener('click', async () => {
+        btnPrint.disabled = true;
+        btnPrint.textContent = 'Sending...';
+        try {
+          await sendItemToPrinter(item);
+          if (item.status === 'postponed') {
+            item.status = 'printed';
+            await persistRemoteState();
+          }
+          btnPrint.textContent = 'Sent';
+          setTimeout(() => renderAdminUI(), 1000);
+        } catch (e) {
+          btnPrint.textContent = 'Error';
+          btnPrint.disabled = false;
+        }
+      });
+
+      btns.appendChild(btnPrev);
+      btns.appendChild(btnPrint);
+
+      row.appendChild(info);
+      row.appendChild(btns);
+      archiveList.appendChild(row);
+    }
   }
 
   function getNextPrintNumber() {
@@ -377,7 +686,6 @@
     setStatus('');
 
     try {
-      // Sync latest global & user count from Cloudflare KV before printing
       await fetchRemoteQuotaState();
 
       if (userPrintsRemaining <= 0) {
@@ -391,40 +699,45 @@
 
       const printNum = getNextPrintNumber();
       const timeStr = getFormattedTimestamp();
-      const labelImageData = renderLabelBitmap(titleVal, descVal, authorVal, timeStr, printNum);
+      const postponed = isCurrentlyPostponed();
 
-      const res = await fetch(`${WORKER_BASE_URL}/api/quote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'idea',
-          text: `${titleVal} - ${descVal}`,
-          author: authorVal,
-          imageData: labelImageData,
-          speed: 2.0,
-          density: 12
-        })
-      });
+      const itemRecord = {
+        num: printNum,
+        title: titleVal,
+        description: descVal,
+        author: authorVal,
+        time: timeStr,
+        status: postponed ? 'postponed' : 'printed'
+      };
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Error ${res.status}`);
+      if (!postponed) {
+        await sendItemToPrinter(itemRecord);
       }
 
-      // Increment and persist to Cloudflare KV globally + localStorage
+      // Save to archive + increment counters in Cloudflare KV
       globalTotalPrints = printNum;
       globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
       userPrintsUsed = Math.min(USER_MAX, userPrintsUsed + 1);
       userPrintsRemaining = Math.max(0, USER_MAX - userPrintsUsed);
 
+      remoteUsersMap[clientToken] = userPrintsUsed;
+      remoteUsersMap[hwHash] = userPrintsUsed;
+      savedItems.push(itemRecord);
+
       try {
         localStorage.setItem(STORAGE_LOCAL_COUNT_KEY, userPrintsUsed.toString());
       } catch (ignored) {}
 
-      await saveRemoteQuotaState(globalTotalPrints, userPrintsUsed);
+      await persistRemoteState();
 
       syncUIQuotaState();
-      setStatus(`Sent to printer (#${printNum} / ${GLOBAL_MAX}).`);
+      renderAdminUI();
+
+      if (postponed) {
+        setStatus(`Saved (#${printNum} / ${GLOBAL_MAX}) — queued for morning print.`);
+      } else {
+        setStatus(`Sent to printer (#${printNum} / ${GLOBAL_MAX}).`);
+      }
 
       projectTitle.value = '';
       projectDescription.value = '';

@@ -13,6 +13,7 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
 }
 
 .container {
@@ -241,6 +242,184 @@ textarea {
   font-weight: 500;
   color: #e4e4e7;
   white-space: nowrap;
+}
+
+/* Admin & Archive */
+.bottom-bar {
+  margin-top: 3.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #121214;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-toggle {
+  background: none;
+  border: none;
+  color: #27272a;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.admin-toggle:hover {
+  color: #71717a;
+}
+
+.admin-section {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.admin-section.hidden {
+  display: none;
+}
+
+.admin-block {
+  border: 1px solid #18181b;
+  border-radius: 4px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.admin-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #e4e4e7;
+}
+
+.admin-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+}
+
+.postpone-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-input {
+  width: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.admin-btn {
+  background: #000000;
+  color: #d4d4d8;
+  border: 1px solid #27272a;
+  border-radius: 4px;
+  padding: 0.45rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.admin-btn:hover {
+  border-color: #52525b;
+  color: #ffffff;
+}
+
+.admin-btn.primary {
+  background: #e4e4e7;
+  color: #000000;
+  border-color: #e4e4e7;
+  font-weight: 500;
+}
+
+.admin-btn.primary:hover {
+  background: #ffffff;
+}
+
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.archive-item {
+  border: 1px solid #18181b;
+  border-radius: 4px;
+  padding: 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.archive-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.archive-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.archive-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+}
+
+.archive-item-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #f4f4f5;
+}
+
+.archive-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #71717a;
+}
+
+.archive-badge.held {
+  color: #eab308;
+}
+
+.archive-item-desc {
+  font-size: 0.8rem;
+  color: #a1a1aa;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.archive-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #52525b;
+}
+
+.archive-btns {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 @media (max-width: 720px) {

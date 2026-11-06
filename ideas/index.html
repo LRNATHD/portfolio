@@ -16,7 +16,7 @@
       <div class="limits">
         <span id="userQuotaText">3/3 prints left</span>
         <span class="sep">&middot;</span>
-        <span id="globalQuotaText">#1 / 400</span>
+        <span id="globalQuotaText">0/400 printed</span>
       </div>
     </header>
 
@@ -86,6 +86,38 @@
         </div>
       </div>
     </main>
+
+    <footer class="bottom-bar">
+      <button type="button" id="btnAdminToggle" class="admin-toggle">admin</button>
+    </footer>
+
+    <section id="adminSection" class="admin-section hidden">
+      <div class="admin-block">
+        <div class="admin-header">
+          <span class="admin-title">Postpone Printing</span>
+          <span id="postponeStateLabel" class="admin-status">Printing immediately</span>
+        </div>
+
+        <div class="postpone-controls">
+          <input type="datetime-local" id="postponeInput" class="admin-input" />
+          <button type="button" id="btnSetPostpone" class="admin-btn">Set time</button>
+          <button type="button" id="btnSleep9am" class="admin-btn">Until 9:00 AM</button>
+          <button type="button" id="btnSleep8h" class="admin-btn">+8h</button>
+          <button type="button" id="btnHoldIndef" class="admin-btn">Hold all</button>
+          <button type="button" id="btnResumeNow" class="admin-btn primary">Resume &amp; print held</button>
+        </div>
+      </div>
+
+      <div class="admin-block">
+        <div class="admin-header">
+          <span class="admin-title" id="archiveCountTitle">Saved Prints (0)</span>
+          <div class="admin-actions">
+            <button type="button" id="btnExportJson" class="admin-btn">Export JSON</button>
+          </div>
+        </div>
+        <div id="archiveList" class="archive-list"></div>
+      </div>
+    </section>
   </div>
 
   <script type="module" src="./app.js"></script>
