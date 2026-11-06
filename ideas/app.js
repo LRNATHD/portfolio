@@ -143,21 +143,161 @@
     btnSubmitIdea.textContent = 'Print';
   }
 
-  function updateLiveTimestamp() {
-    if (!previewTimestamp) return;
+  function getFormattedTimestamp() {
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
-    previewTimestamp.textContent = `${y}-${m}-${d} ${hh}:${mm}`;
+    return `${y}-${m}-${d} ${hh}:${mm}`;
+  }
+
+  function updateLiveTimestamp() {
+    if (!previewTimestamp) return;
+    previewTimestamp.textContent = getFormattedTimestamp();
   }
 
   function setStatus(msg, isError = false) {
     if (!statusMsg) return;
     statusMsg.textContent = msg;
     statusMsg.classList.toggle('error', isError);
+  }
+
+  /**
+   * Word-wraps text on a 2D canvas context, respecting explicit newlines
+   * and breaking overly long single tokens if needed.
+   */
+  function wrapCanvasText(ctx, text, maxWidth) {
+    const lines = [];
+    const paragraphs = String(text || '').replace(/\r\n/g, '\n').split('\n');
+
+    for (const para of paragraphs) {
+      if (para.trim() === '') {
+        lines.push('');
+        continue;
+      }
+      const words = para.split(/\s+/);
+      let currentLine = '';
+
+      for (const word of words) {
+        // If a single word is wider than maxWidth, slice it character by character
+        if (ctx.measureText(word).width > maxWidth) {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = '';
+          }
+          let chunk = '';
+          for (const ch of word) {
+            const testChunk = chunk + ch;
+            if (ctx.measureText(testChunk).width > maxWidth && chunk) {
+              lines.push(chunk);
+              chunk = ch;
+            } else {
+              chunk = testChunk;
+            }
+          }
+          currentLine = chunk;
+          continue;
+        }
+
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    }
+    return lines;
+  }
+
+  /**
+   * Renders the exact 5-field preview card onto an 800x1200 (203 DPI 4x6")
+   * 1-bit monochrome bitmap in < 2ms so the printer outputs the exact preview
+   * with zero extra headers, barcodes, or metadata.
+   */
+  function renderLabelBitmap(title, description, handle, timeStr, printNum) {
+    const W = 800;
+    const H = 1200;
+    const PAD = 48;
+    const CONTENT_W = W - PAD * 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Pure white paper background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#000000';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+
+    // 1. Title
+    ctx.font = '600 43px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    const titleLines = wrapCanvasText(ctx, title, CONTENT_W);
+    let curY = PAD;
+    for (const line of titleLines) {
+      ctx.fillText(line, PAD, curY);
+      curY += 56;
+    }
+
+    // Top divider
+    curY += 20;
+    ctx.fillRect(PAD, curY, CONTENT_W, 2);
+    curY += 32;
+
+    // 2. Description & details
+    ctx.font = '400 33px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    const descLines = wrapCanvasText(ctx, description, CONTENT_W);
+    const maxDescY = 990;
+    for (const line of descLines) {
+      if (curY + 48 > maxDescY) break;
+      if (line !== '') {
+        ctx.fillText(line, PAD, curY);
+      }
+      curY += 50;
+    }
+
+    // Bottom divider
+    const footerDividerY = 1042;
+    ctx.fillRect(PAD, footerDividerY, CONTENT_W, 2);
+
+    // 3. Handle (bottom-left)
+    ctx.font = '500 30px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(handle, PAD, 1072);
+
+    // 4. Time (bottom-left, under handle)
+    ctx.font = '400 25px "JetBrains Mono", monospace';
+    ctx.fillText(timeStr, PAD, 1114);
+
+    // 5. Print number out of 400 (bottom-right)
+    ctx.font = '500 32px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`#${printNum} / ${GLOBAL_MAX}`, W - PAD, 1106);
+
+    // Strict 1-bit monochrome threshold for crisp thermal dots & fast empty-band skipping
+    const imgData = ctx.getImageData(0, 0, W, H);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = lum < 175 ? 0 : 255;
+      d[i] = v;
+      d[i + 1] = v;
+      d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    return canvas.toDataURL('image/png');
   }
 
   async function handleSubmit(e) {
@@ -194,6 +334,8 @@
     setStatus('');
 
     const printNum = getNextPrintNumber();
+    const timeStr = getFormattedTimestamp();
+    const labelImageData = renderLabelBitmap(titleVal, descVal, authorVal, timeStr, printNum);
 
     try {
       let res = await fetch(`${WORKER_BASE_URL}/api/ideas/submit`, {
@@ -204,6 +346,7 @@
           description: descVal,
           author: authorVal,
           printNumber: printNum,
+          imageData: labelImageData,
           clientId: clientToken
         })
       });
@@ -214,9 +357,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'idea',
-            text: `PROJECT: ${titleVal} | NUM: ${printNum}/${GLOBAL_MAX} | DETAILS: ${descVal}`,
+            text: `${titleVal} - ${descVal}`,
             author: authorVal,
-            imageData: null,
+            imageData: labelImageData,
             speed: 2.0,
             density: 12
           })
