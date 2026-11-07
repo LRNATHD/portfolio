@@ -53,6 +53,7 @@
   const btnResumeNow = document.getElementById('btnResumeNow');
   const archiveCountTitle = document.getElementById('archiveCountTitle');
   const archiveList = document.getElementById('archiveList');
+  const btnClearQueue = document.getElementById('btnClearQueue');
   const btnPrintUnprinted = document.getElementById('btnPrintUnprinted');
   const btnExportJson = document.getElementById('btnExportJson');
 
@@ -69,6 +70,7 @@
     setInterval(() => {
       fetchRemoteQuotaState().then(() => {
         checkAndFlushPostponed();
+        syncUnconfirmedQuoteStatuses();
       });
     }, 25000);
   }
@@ -208,6 +210,41 @@
       });
     }
 
+    if (btnClearQueue) {
+      btnClearQueue.addEventListener('click', async () => {
+        btnClearQueue.disabled = true;
+        btnClearQueue.textContent = 'Clearing...';
+        try {
+          await fetchRemoteQuotaState();
+          const nowTs = Date.now();
+          for (const item of savedItems) {
+            if (item.status !== 'printed') {
+              if (item.quoteId) {
+                fetch(`${WORKER_BASE_URL}/api/quote/ack?secret=${encodeURIComponent(KV_AUTH)}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: item.quoteId, status: 'printed' })
+                }).catch(() => {});
+              }
+              item.status = 'printed';
+              item.statusUpdatedAt = nowTs;
+              delete item.error;
+            }
+          }
+          fetch(`${WORKER_BASE_URL}/api/queue/clear?secret=${encodeURIComponent(KV_AUTH)}`, {
+            method: 'POST'
+          }).catch(() => {});
+          await persistRemoteState();
+          renderAdminUI();
+        } catch (e) {
+          console.error(e);
+        } finally {
+          btnClearQueue.disabled = false;
+          btnClearQueue.textContent = 'Clear queue';
+        }
+      });
+    }
+
     if (btnPrintUnprinted) {
       btnPrintUnprinted.addEventListener('click', async () => {
         btnPrintUnprinted.disabled = true;
@@ -266,14 +303,34 @@
         map.set(key, { ...item });
       } else {
         const prev = map.get(key);
-        const prevPrio = statusPriority[prev.status] || 0;
-        const nextPrio = statusPriority[item.status] || 0;
-        map.set(key, {
+        const prevTs = prev.statusUpdatedAt || 0;
+        const nextTs = item.statusUpdatedAt || 0;
+        let chosenStatus;
+        let chosenError;
+        if (nextTs !== prevTs) {
+          const newer = nextTs > prevTs ? item : prev;
+          chosenStatus = newer.status;
+          chosenError = newer.error;
+        } else {
+          const prevPrio = statusPriority[prev.status] || 0;
+          const nextPrio = statusPriority[item.status] || 0;
+          const winner = nextPrio >= prevPrio ? item : prev;
+          chosenStatus = winner.status;
+          chosenError = winner.error;
+        }
+        const mergedItem = {
           ...prev,
           ...item,
           quoteId: item.quoteId || prev.quoteId,
-          status: nextPrio >= prevPrio ? item.status : prev.status
-        });
+          statusUpdatedAt: Math.max(prevTs, nextTs),
+          status: chosenStatus
+        };
+        if (chosenStatus === 'printed' || !chosenError) {
+          delete mergedItem.error;
+        } else {
+          mergedItem.error = chosenError;
+        }
+        map.set(key, mergedItem);
       }
     }
 
@@ -336,7 +393,7 @@
         if (data && typeof data.error === 'string' && data.error.startsWith('{')) {
           const parsed = JSON.parse(data.error);
           if (Array.isArray(parsed.items)) {
-            savedItems = mergeSavedItems(savedItems, parsed.items);
+            savedItems = mergeSavedItems(parsed.items, savedItems);
           }
           const highestItemNum = savedItems.reduce((acc, it) => Math.max(acc, it.num || 0), 0);
           globalTotalPrints = Math.max(globalTotalPrints, parsed.total || 0, highestItemNum, savedItems.length);
@@ -364,7 +421,7 @@
   async function syncUnconfirmedQuoteStatuses() {
     let changed = false;
     for (const item of savedItems) {
-      if (!item.quoteId || item.status === 'postponed') continue;
+      if (!item.quoteId || item.status === 'printed' || item.status === 'postponed') continue;
       try {
         const res = await fetch(`${WORKER_BASE_URL}/api/quote/status?id=${encodeURIComponent(item.quoteId)}&t=${Date.now()}`, {
           cache: 'no-store'
@@ -373,14 +430,12 @@
           const st = await res.json();
           if (st.status === 'printed' && item.status !== 'printed') {
             item.status = 'printed';
+            item.statusUpdatedAt = Date.now();
             delete item.error;
             changed = true;
           } else if (st.status === 'failed' && item.status !== 'failed') {
             item.status = 'failed';
             item.error = st.error || 'Printer disconnected';
-            changed = true;
-          } else if (st.status === 'pending' && item.status !== 'queued') {
-            item.status = 'queued';
             changed = true;
           }
         }
@@ -620,6 +675,36 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
 
+      if (item.status !== 'printed') {
+        const btnDequeue = document.createElement('button');
+        btnDequeue.type = 'button';
+        btnDequeue.className = 'admin-btn';
+        btnDequeue.textContent = 'Dequeue';
+        btnDequeue.title = 'Remove from print queue and mark as already printed';
+        btnDequeue.addEventListener('click', async () => {
+          btnDequeue.disabled = true;
+          btnDequeue.textContent = 'Removing...';
+          try {
+            if (item.quoteId) {
+              fetch(`${WORKER_BASE_URL}/api/quote/ack?secret=${encodeURIComponent(KV_AUTH)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: item.quoteId, status: 'printed' })
+              }).catch(() => {});
+            }
+            item.status = 'printed';
+            item.statusUpdatedAt = Date.now();
+            delete item.error;
+            await persistRemoteState();
+            renderAdminUI();
+          } catch (e) {
+            btnDequeue.disabled = false;
+            btnDequeue.textContent = 'Dequeue';
+          }
+        });
+        btns.appendChild(btnDequeue);
+      }
+
       const btnPrint = document.createElement('button');
       btnPrint.type = 'button';
       btnPrint.className = 'admin-btn';
@@ -630,6 +715,7 @@
         try {
           await sendItemToPrinter(item);
           item.status = 'printed';
+          item.statusUpdatedAt = Date.now();
           delete item.error;
           await persistRemoteState();
           btnPrint.textContent = 'Sent';
