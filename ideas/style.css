@@ -152,14 +152,106 @@ textarea {
   cursor: not-allowed;
 }
 
+.submit-btn.success-state:disabled {
+  background: #052e16;
+  border-color: #166534;
+  color: #4ade80;
+  opacity: 1;
+}
+
 .status-msg {
   font-size: 0.825rem;
   color: #a1a1aa;
-  min-height: 1.25rem;
+}
+
+.status-msg:empty {
+  display: none;
 }
 
 .status-msg.error {
   color: #ef4444;
+}
+
+.feedback-box {
+  border: 1px solid #27272a;
+  background: #050505;
+  border-radius: 4px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.feedback-box.hidden {
+  display: none;
+}
+
+.feedback-box.sending {
+  border-color: #3f3f46;
+}
+
+.feedback-box.success {
+  border-color: #166534;
+  background: #021409;
+}
+
+.feedback-box.error {
+  border-color: #7f1d1d;
+  background: #140303;
+}
+
+.feedback-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.feedback-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a1a1aa;
+  flex-shrink: 0;
+}
+
+.feedback-box.sending .feedback-dot {
+  background: #eab308;
+  animation: pulse-dot 1s infinite ease-in-out;
+}
+
+.feedback-box.success .feedback-dot {
+  background: #22c55e;
+}
+
+.feedback-box.error .feedback-dot {
+  background: #ef4444;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.feedback-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f4f4f5;
+}
+
+.feedback-box.success .feedback-title {
+  color: #4ade80;
+}
+
+.feedback-box.error .feedback-title {
+  color: #f87171;
+}
+
+.feedback-desc {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #a1a1aa;
+  padding-left: 1.05rem;
 }
 
 .preview-col {
@@ -171,6 +263,12 @@ textarea {
 .preview-label {
   font-size: 0.85rem;
   color: #a1a1aa;
+  transition: color 0.2s ease;
+}
+
+.preview-label.sent {
+  color: #4ade80;
+  font-weight: 500;
 }
 
 .label-card {
@@ -183,6 +281,11 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  transition: border-color 0.2s ease;
+}
+
+.label-card.sent {
+  border-color: #166534;
 }
 
 .label-title {

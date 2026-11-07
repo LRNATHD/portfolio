@@ -17,6 +17,7 @@
   let postponeUntil = 0; // 0 = immediate, -1 = hold indefinitely, >0 = epoch ms
   let isSubmitting = false;
   let isFlushing = false;
+  let showingSentPreview = false;
 
   const form = document.getElementById('ideaForm');
   const projectTitle = document.getElementById('projectTitle');
@@ -27,9 +28,14 @@
   const authorCharCount = document.getElementById('authorCharCount');
   const btnSubmitIdea = document.getElementById('btnSubmitIdea');
   const statusMsg = document.getElementById('statusMsg');
+  const feedbackBox = document.getElementById('feedbackBox');
+  const feedbackTitle = document.getElementById('feedbackTitle');
+  const feedbackDesc = document.getElementById('feedbackDesc');
 
   const globalQuotaText = document.getElementById('globalQuotaText');
 
+  const previewHeaderLabel = document.getElementById('previewHeaderLabel');
+  const thermalPreviewCard = document.getElementById('thermalPreviewCard');
   const previewTitle = document.getElementById('previewTitle');
   const previewDescription = document.getElementById('previewDescription');
   const previewAuthor = document.getElementById('previewAuthor');
@@ -106,20 +112,53 @@
     }
   }
 
+  function clearSentPreviewHighlight() {
+    if (!showingSentPreview) return;
+    showingSentPreview = false;
+    if (previewHeaderLabel) {
+      previewHeaderLabel.textContent = 'Preview';
+      previewHeaderLabel.classList.remove('sent');
+    }
+    if (thermalPreviewCard) {
+      thermalPreviewCard.classList.remove('sent');
+    }
+    const nextNum = getNextPrintNumber();
+    if (previewNumber) {
+      previewNumber.textContent = `#${nextNum} / ${GLOBAL_MAX}`;
+    }
+    const tVal = projectTitle.value.trim();
+    const dVal = projectDescription.value.trim();
+    const aVal = projectAuthor.value.trim();
+    previewTitle.textContent = tVal.length > 0 ? tVal : SAMPLE_TITLE;
+    previewDescription.textContent = dVal.length > 0 ? dVal : SAMPLE_DESC;
+    previewAuthor.textContent = aVal.length > 0 ? aVal : 'Anonymous';
+  }
+
+  function showFeedback(state, title, desc) {
+    if (!feedbackBox) return;
+    feedbackBox.classList.remove('hidden', 'sending', 'success', 'error');
+    feedbackBox.classList.add(state);
+    if (feedbackTitle) feedbackTitle.textContent = title;
+    if (feedbackDesc) feedbackDesc.textContent = desc;
+  }
+
   function setupEventListeners() {
     projectTitle.addEventListener('input', () => {
+      clearSentPreviewHighlight();
       const val = projectTitle.value.trim();
       titleCharCount.textContent = `${projectTitle.value.length}/80`;
       previewTitle.textContent = val.length > 0 ? val : SAMPLE_TITLE;
     });
 
     projectDescription.addEventListener('input', () => {
+      clearSentPreviewHighlight();
       const val = projectDescription.value.trim();
       descCharCount.textContent = `${projectDescription.value.length}/500`;
       previewDescription.textContent = val.length > 0 ? val : SAMPLE_DESC;
     });
 
     projectAuthor.addEventListener('input', () => {
+      clearSentPreviewHighlight();
       const val = projectAuthor.value.trim();
       authorCharCount.textContent = `${projectAuthor.value.length}/35`;
       previewAuthor.textContent = val.length > 0 ? val : 'Anonymous';
@@ -459,6 +498,11 @@
           delete item.error;
           await persistRemoteState();
           renderAdminUI();
+          showFeedback(
+            'success',
+            `✓ Idea #${item.num} / ${GLOBAL_MAX} Printed on Noah's Desk!`,
+            `Confirmed: your label ("${item.title}") just finished physically printing out.`
+          );
           return true;
         }
 
@@ -473,6 +517,11 @@
             item.error = st.error || 'Printer offline';
             await persistRemoteState();
             renderAdminUI();
+            showFeedback(
+              'success',
+              `✓ Idea #${item.num} / ${GLOBAL_MAX} Received & Saved`,
+              `Your idea went through and is safely saved (#${item.num} / ${GLOBAL_MAX}). The printer is currently asleep and will print it when it wakes up.`
+            );
             return false;
           }
         }
@@ -482,6 +531,11 @@
     // Still pending in queue (printer will pick it up on next poll or when online)
     await persistRemoteState();
     renderAdminUI();
+    showFeedback(
+      'success',
+      `✓ Idea #${item.num} / ${GLOBAL_MAX} Received & Saved in Queue`,
+      `Your message went through and is saved (#${item.num} / ${GLOBAL_MAX}). It is queued and will print as soon as the desk printer connects.`
+    );
     return false;
   }
 
@@ -606,13 +660,13 @@
     if (globalQuotaText) {
       globalQuotaText.textContent = `${globalTotalPrints}/${GLOBAL_MAX} printed`;
     }
-    if (previewNumber) {
+    if (previewNumber && !showingSentPreview) {
       previewNumber.textContent = `#${nextNum} / ${GLOBAL_MAX}`;
     }
 
     if (globalPrintsRemaining <= 0) {
       disableFormInputs('400/400 limit reached');
-    } else {
+    } else if (!btnSubmitIdea.classList.contains('success-state')) {
       enableFormInputs();
     }
   }
@@ -799,14 +853,15 @@
 
     isSubmitting = true;
     btnSubmitIdea.disabled = true;
-    btnSubmitIdea.textContent = 'Printing...';
+    btnSubmitIdea.textContent = 'Sending to printer...';
     setStatus('');
+    showFeedback('sending', 'Sending your idea...', 'Saving your message to Noah\'s printer queue...');
 
     try {
       await fetchRemoteQuotaState();
 
       if (globalPrintsRemaining <= 0) {
-        setStatus('400 print limit reached.', true);
+        showFeedback('error', '400/400 Limit Reached', 'All 400 prints on this roll have been used.');
         return;
       }
 
@@ -831,20 +886,37 @@
       globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
       await persistRemoteState();
 
+      // Keep the user's submitted card visible in the Preview box with a "Sent" highlight
+      showingSentPreview = true;
+      previewTitle.textContent = itemRecord.title;
+      previewDescription.textContent = itemRecord.description;
+      previewAuthor.textContent = itemRecord.author;
+      previewTimestamp.textContent = itemRecord.time;
+      previewNumber.textContent = `#${itemRecord.num} / ${GLOBAL_MAX}`;
+      if (previewHeaderLabel) {
+        previewHeaderLabel.textContent = `Preview — Sent (#${itemRecord.num} / ${GLOBAL_MAX})`;
+        previewHeaderLabel.classList.add('sent');
+      }
+      if (thermalPreviewCard) {
+        thermalPreviewCard.classList.add('sent');
+      }
+
       if (!postponed) {
+        showFeedback(
+          'success',
+          `✓ Idea #${itemRecord.num} / ${GLOBAL_MAX} Sent & Saved!`,
+          `Your message went through! Transmitting label to Noah's desk printer now...`
+        );
         await sendItemToPrinter(itemRecord);
         await persistRemoteState();
         // Verify delivery in background & auto-retry if Bluetooth wake-up failed on first attempt
         verifyPrintDelivery(itemRecord);
-      }
-
-      syncUIQuotaState();
-      renderAdminUI();
-
-      if (postponed) {
-        setStatus(`Saved (#${itemRecord.num} / ${GLOBAL_MAX}) — queued for scheduled print.`);
       } else {
-        setStatus(`Sent to printer (#${itemRecord.num} / ${GLOBAL_MAX}).`);
+        showFeedback(
+          'success',
+          `✓ Idea #${itemRecord.num} / ${GLOBAL_MAX} Received & Saved!`,
+          `Your message went through and is safely queued (#${itemRecord.num} / ${GLOBAL_MAX}). It will print automatically when the sleep timer ends.`
+        );
       }
 
       projectTitle.value = '';
@@ -853,14 +925,25 @@
       titleCharCount.textContent = '0/80';
       descCharCount.textContent = '0/500';
       authorCharCount.textContent = '0/35';
-      previewTitle.textContent = SAMPLE_TITLE;
-      previewDescription.textContent = SAMPLE_DESC;
-      previewAuthor.textContent = 'Anonymous';
+
+      // Show clear confirmation on the button for 2.5s so they know their click registered
+      btnSubmitIdea.classList.add('success-state');
+      btnSubmitIdea.disabled = true;
+      btnSubmitIdea.textContent = `✓ Sent (#${itemRecord.num} / ${GLOBAL_MAX})`;
+      syncUIQuotaState();
+      renderAdminUI();
+
+      setTimeout(() => {
+        btnSubmitIdea.classList.remove('success-state');
+        syncUIQuotaState();
+      }, 2500);
     } catch (err) {
-      setStatus(err.message || 'Failed to send.', true);
+      showFeedback('error', 'Could not reach printer queue', err.message || 'Please try clicking Print again.');
     } finally {
       isSubmitting = false;
-      syncUIQuotaState();
+      if (!btnSubmitIdea.classList.contains('success-state')) {
+        syncUIQuotaState();
+      }
     }
   }
 

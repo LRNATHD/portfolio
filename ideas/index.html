@@ -65,10 +65,18 @@
 
         <button type="submit" id="btnSubmitIdea" class="submit-btn">Print</button>
         <p id="statusMsg" class="status-msg"></p>
+
+        <div id="feedbackBox" class="feedback-box hidden" role="status" aria-live="polite">
+          <div class="feedback-head">
+            <span id="feedbackDot" class="feedback-dot"></span>
+            <span id="feedbackTitle" class="feedback-title">Sending idea...</span>
+          </div>
+          <p id="feedbackDesc" class="feedback-desc">Connecting to printer queue...</p>
+        </div>
       </form>
 
       <div class="preview-col">
-        <div class="preview-label">Preview</div>
+        <div class="preview-label" id="previewHeaderLabel">Preview</div>
         <div class="label-card" id="thermalPreviewCard">
           <div class="label-title" id="previewTitle">Toaster that catapults toast onto your plate</div>
           <div class="label-divider"></div>
