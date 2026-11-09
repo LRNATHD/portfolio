@@ -55,6 +55,58 @@ body {
   color: #3f3f46;
 }
 
+.intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2.5rem;
+  margin-bottom: 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #18181b;
+}
+
+.intro-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1;
+}
+
+.intro-title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  letter-spacing: -0.02em;
+}
+
+.intro-desc {
+  font-size: 0.925rem;
+  line-height: 1.65;
+  color: #a1a1aa;
+}
+
+.intro-photo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.intro-photo {
+  width: 145px;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid #27272a;
+  display: block;
+}
+
+.intro-caption {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #71717a;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 340px;
@@ -526,6 +578,12 @@ textarea {
 }
 
 @media (max-width: 720px) {
+  .intro {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.25rem;
+  }
+
   .grid {
     grid-template-columns: 1fr;
     gap: 2rem;
