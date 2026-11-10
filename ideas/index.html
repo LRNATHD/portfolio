@@ -125,6 +125,20 @@
 
       <div class="admin-block">
         <div class="admin-header">
+          <span class="admin-title">Locations</span>
+          <div class="admin-actions">
+            <span id="mapStatsLabel" class="admin-status">0 located</span>
+            <button type="button" id="btnFitMap" class="admin-btn">Fit all</button>
+          </div>
+        </div>
+        <div class="admin-map-wrap">
+          <div id="adminMap" class="admin-map"></div>
+        </div>
+        <div id="mapSelectedMeta" class="map-selected-meta">Rough city-level IP estimates per submission. Older prints without geo are omitted.</div>
+      </div>
+
+      <div class="admin-block">
+        <div class="admin-header">
           <span class="admin-title" id="archiveCountTitle">Saved Prints (0)</span>
           <div class="admin-actions">
             <button type="button" id="btnClearQueue" class="admin-btn">Clear queue</button>

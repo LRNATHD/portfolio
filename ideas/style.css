@@ -461,6 +461,127 @@ textarea {
   color: #a1a1aa;
 }
 
+.admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-map-wrap {
+  position: relative;
+  border: 1px solid #27272a;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #000000;
+}
+
+.admin-map {
+  width: 100%;
+  height: 300px;
+  background: #000000;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.admin-map .leaflet-tile-pane {
+  filter: grayscale(1) contrast(1.45) brightness(0.62);
+}
+
+.admin-map .leaflet-control-zoom {
+  border: 1px solid #27272a !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.admin-map .leaflet-control-zoom a {
+  background: #000000 !important;
+  color: #d4d4d8 !important;
+  border-bottom: 1px solid #27272a !important;
+  width: 26px !important;
+  height: 26px !important;
+  line-height: 24px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.85rem !important;
+}
+
+.admin-map .leaflet-control-zoom a:last-child {
+  border-bottom: none !important;
+}
+
+.admin-map .leaflet-control-zoom a:hover {
+  background: #18181b !important;
+  color: #ffffff !important;
+}
+
+.admin-map .leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.78) !important;
+  color: #52525b !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.625rem !important;
+  padding: 2px 6px !important;
+}
+
+.admin-map .leaflet-control-attribution a {
+  color: #71717a !important;
+}
+
+.admin-map .leaflet-popup-content-wrapper,
+.admin-map .leaflet-popup-tip {
+  background: #000000 !important;
+  color: #e4e4e7 !important;
+  border: 1px solid #27272a;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.admin-map .leaflet-popup-tip {
+  border-top: none;
+  border-left: none;
+}
+
+.admin-map .leaflet-popup-content {
+  margin: 0.65rem 0.8rem !important;
+  min-width: 170px;
+}
+
+.admin-map .leaflet-popup-close-button {
+  color: #71717a !important;
+  padding: 4px 6px !important;
+}
+
+.admin-map .leaflet-popup-close-button:hover {
+  color: #ffffff !important;
+}
+
+.map-popup-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #4ade80;
+  margin-bottom: 0.2rem;
+}
+
+.map-popup-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #f4f4f5;
+  margin-bottom: 0.25rem;
+  line-height: 1.3;
+}
+
+.map-popup-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  line-height: 1.4;
+}
+
+.map-selected-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: #71717a;
+}
+
 .postpone-controls {
   display: flex;
   flex-wrap: wrap;
@@ -587,5 +708,9 @@ textarea {
   .grid {
     grid-template-columns: 1fr;
     gap: 2rem;
+  }
+
+  .admin-map {
+    height: 240px;
   }
 }

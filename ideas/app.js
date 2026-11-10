@@ -58,12 +58,27 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
   const btnClearQueue = document.getElementById('btnClearQueue');
   const btnPrintUnprinted = document.getElementById('btnPrintUnprinted');
   const btnExportJson = document.getElementById('btnExportJson');
+  const adminMapEl = document.getElementById('adminMap');
+  const mapStatsLabel = document.getElementById('mapStatsLabel');
+  const mapSelectedMeta = document.getElementById('mapSelectedMeta');
+  const btnFitMap = document.getElementById('btnFitMap');
+
+  let cachedRoughLocation = null;
+  let geoLookupPromise = null;
+  let leafletLib = null;
+  let adminMap = null;
+  let adminMapLayer = null;
+  let mapMarkersByKey = new Map();
+  let mapHasAutoFitted = false;
+  let lastRenderedGeoSig = '';
+  let selectedMapKey = null;
 
   function init() {
     setupEventListeners();
     initAdminAccess();
     updateLiveTimestamp();
     syncUIQuotaState();
+    geoLookupPromise = resolveRoughLocation();
     fetchRemoteQuotaState().then(() => {
       checkAndFlushPostponed();
       syncUnconfirmedQuoteStatuses();
@@ -306,6 +321,72 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
         URL.revokeObjectURL(url);
       });
     }
+
+    if (btnFitMap) {
+      btnFitMap.addEventListener('click', () => {
+        fitAllMapPins();
+      });
+    }
+  }
+
+  async function fetchJsonWithTimeout(url, timeoutMs = 2500) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function normalizeGeoPayload(raw) {
+    if (!raw) return null;
+    const latNum = parseFloat(raw.latitude ?? raw.lat);
+    const lonNum = parseFloat(raw.longitude ?? raw.lon);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return null;
+
+    const city = String(raw.city || '').trim();
+    const region = String(raw.region || raw.region_name || '').trim();
+    const country = String(raw.country_code || raw.country || '').trim();
+    const label = [city, region, country].filter(Boolean).join(', ') || `${latNum.toFixed(2)}, ${lonNum.toFixed(2)}`;
+
+    return {
+      label,
+      city,
+      region,
+      country,
+      lat: Math.round(latNum * 100) / 100,
+      lon: Math.round(lonNum * 100) / 100
+    };
+  }
+
+  /**
+   * Resolves rough city-level IP coordinates (~1 km rounded) without prompting for GPS.
+   * Never stores or transmits raw IP addresses.
+   */
+  async function resolveRoughLocation() {
+    if (cachedRoughLocation) return cachedRoughLocation;
+    const primary = await fetchJsonWithTimeout('https://get.geojs.io/v1/ip/geo.json', 2500);
+    let parsed = normalizeGeoPayload(primary);
+    if (!parsed) {
+      const fallback = await fetchJsonWithTimeout('https://ipwho.is/', 2500);
+      parsed = normalizeGeoPayload(fallback);
+    }
+    if (parsed) cachedRoughLocation = parsed;
+    return parsed;
+  }
+
+  async function getRoughLocationForSubmit() {
+    if (cachedRoughLocation) return cachedRoughLocation;
+    if (!geoLookupPromise) geoLookupPromise = resolveRoughLocation();
+    return await Promise.race([
+      geoLookupPromise,
+      new Promise(resolve => setTimeout(() => resolve(cachedRoughLocation), 1200))
+    ]);
   }
 
   function getItemKey(item) {
@@ -347,6 +428,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
           ...prev,
           ...item,
           quoteId: item.quoteId || prev.quoteId,
+          location: item.location || prev.location,
           statusUpdatedAt: Math.max(prevTs, nextTs),
           status: chosenStatus
         };
@@ -684,7 +766,10 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
 
       const metaDiv = document.createElement('div');
       metaDiv.className = 'archive-meta';
-      metaDiv.textContent = `${item.author} · ${item.time}`;
+      const hasGeo = item.location && Number.isFinite(item.location.lat) && Number.isFinite(item.location.lon);
+      metaDiv.textContent = hasGeo
+        ? `${item.author} · ${item.time} · ${item.location.label || `${item.location.lat}, ${item.location.lon}`}`
+        : `${item.author} · ${item.time}`;
 
       info.appendChild(top);
       info.appendChild(descDiv);
@@ -705,6 +790,17 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
         previewNumber.textContent = `#${item.num} / ${GLOBAL_MAX}`;
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
+
+      let btnMap = null;
+      if (hasGeo) {
+        btnMap = document.createElement('button');
+        btnMap.type = 'button';
+        btnMap.className = 'admin-btn';
+        btnMap.textContent = 'Map';
+        btnMap.addEventListener('click', () => {
+          focusItemOnMap(item);
+        });
+      }
 
       if (item.status !== 'printed') {
         const btnDequeue = document.createElement('button');
@@ -758,12 +854,202 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       });
 
       btns.appendChild(btnPrev);
+      if (btnMap) btns.appendChild(btnMap);
       btns.appendChild(btnPrint);
 
       row.appendChild(info);
       row.appendChild(btns);
       archiveList.appendChild(row);
     }
+
+    renderAdminMap();
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  async function ensureAdminMap() {
+    if (!adminMapEl) return null;
+    if (adminMap) {
+      adminMap.invalidateSize();
+      return adminMap;
+    }
+
+    const [LModule] = await Promise.all([
+      import('leaflet'),
+      import('leaflet/dist/leaflet.css')
+    ]);
+    leafletLib = LModule.default || LModule;
+
+    adminMap = leafletLib.map(adminMapEl, {
+      center: [25, -20],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 12,
+      worldCopyJump: true,
+      zoomControl: true
+    });
+
+    leafletLib.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd',
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(adminMap);
+
+    adminMapLayer = leafletLib.layerGroup().addTo(adminMap);
+    return adminMap;
+  }
+
+  function fitAllMapPins() {
+    if (!adminMap || !leafletLib) return;
+    const pts = [];
+    for (const entry of mapMarkersByKey.values()) {
+      pts.push(entry.marker.getLatLng());
+    }
+    if (pts.length === 0) {
+      adminMap.setView([25, -20], 2);
+      return;
+    }
+    if (pts.length === 1) {
+      adminMap.setView(pts[0], 8);
+      return;
+    }
+    const bounds = leafletLib.latLngBounds(pts);
+    adminMap.fitBounds(bounds, { padding: [36, 36], maxZoom: 10 });
+  }
+
+  function updateMarkerHighlight(activeKey) {
+    selectedMapKey = activeKey;
+    for (const [key, entry] of mapMarkersByKey.entries()) {
+      const isSelected = key === activeKey;
+      entry.marker.setStyle({
+        color: '#000000',
+        weight: 1.5,
+        fillColor: isSelected ? '#4ade80' : '#e4e4e7',
+        fillOpacity: 1,
+        radius: isSelected ? 6.5 : 5
+      });
+      entry.circle.setStyle({
+        color: isSelected ? '#4ade80' : '#71717a',
+        fillColor: isSelected ? '#22c55e' : '#a1a1aa',
+        fillOpacity: isSelected ? 0.14 : 0.06,
+        weight: 1
+      });
+    }
+  }
+
+  function focusItemOnMap(item) {
+    if (!item || !item.location) return;
+    const key = getItemKey(item);
+    if (adminMapEl) {
+      adminMapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    renderAdminMap().then(() => {
+      const entry = mapMarkersByKey.get(key);
+      if (entry && adminMap) {
+        updateMarkerHighlight(key);
+        adminMap.setView(entry.marker.getLatLng(), Math.max(adminMap.getZoom(), 9), { animate: true });
+        entry.marker.openPopup();
+        if (mapSelectedMeta) {
+          const loc = item.location;
+          mapSelectedMeta.textContent = `#${item.num} · ${item.author} · ${loc.label} (~${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)})`;
+        }
+      }
+    });
+  }
+
+  async function renderAdminMap() {
+    if (!adminSection || adminSection.classList.contains('hidden') || !adminMapEl) return;
+
+    const located = savedItems.filter(
+      it => it.location && Number.isFinite(it.location.lat) && Number.isFinite(it.location.lon)
+    );
+
+    if (mapStatsLabel) {
+      mapStatsLabel.textContent = located.length === 1
+        ? '1 located print'
+        : `${located.length} located prints`;
+    }
+
+    const sig = located.map(it => `${getItemKey(it)}@${it.location.lat},${it.location.lon}`).join('|');
+    if (sig === lastRenderedGeoSig && adminMap) return;
+
+    const map = await ensureAdminMap();
+    if (!map || !adminMapLayer || !leafletLib) return;
+
+    lastRenderedGeoSig = sig;
+    adminMapLayer.clearLayers();
+    mapMarkersByKey.clear();
+
+    const coordCounts = new Map();
+
+    for (const item of located) {
+      const loc = item.location;
+      const baseLat = loc.lat;
+      const baseLon = loc.lon;
+      const coordBucket = `${baseLat.toFixed(2)},${baseLon.toFixed(2)}`;
+      const dupIndex = coordCounts.get(coordBucket) || 0;
+      coordCounts.set(coordBucket, dupIndex + 1);
+
+      // Slight visual spiral offset when multiple submissions share the same rough city coordinate
+      let pinLat = baseLat;
+      let pinLon = baseLon;
+      if (dupIndex > 0) {
+        const angle = dupIndex * 2.39996;
+        const offsetDeg = 0.008 * Math.sqrt(dupIndex);
+        pinLat = baseLat + Math.sin(angle) * offsetDeg;
+        pinLon = baseLon + Math.cos(angle) * offsetDeg;
+      }
+
+      const key = getItemKey(item);
+      const isSelected = key === selectedMapKey;
+
+      const circle = leafletLib.circle([baseLat, baseLon], {
+        radius: 8000,
+        color: isSelected ? '#4ade80' : '#71717a',
+        weight: 1,
+        dashArray: '3 4',
+        fillColor: isSelected ? '#22c55e' : '#a1a1aa',
+        fillOpacity: isSelected ? 0.14 : 0.06,
+        interactive: false
+      }).addTo(adminMapLayer);
+
+      const marker = leafletLib.circleMarker([pinLat, pinLon], {
+        radius: isSelected ? 6.5 : 5,
+        color: '#000000',
+        weight: 1.5,
+        fillColor: isSelected ? '#4ade80' : '#e4e4e7',
+        fillOpacity: 1
+      }).addTo(adminMapLayer);
+
+      const popupHtml =
+        `<div class="map-popup-num">#${item.num} / ${GLOBAL_MAX}</div>` +
+        `<div class="map-popup-title">${escapeHtml(item.title)}</div>` +
+        `<div class="map-popup-meta">${escapeHtml(item.author)} · ${escapeHtml(item.time)}<br/>${escapeHtml(loc.label)} (${baseLat.toFixed(2)}, ${baseLon.toFixed(2)})</div>`;
+
+      marker.bindPopup(popupHtml);
+      marker.on('click', () => {
+        updateMarkerHighlight(key);
+        if (mapSelectedMeta) {
+          mapSelectedMeta.textContent = `#${item.num} · ${item.author} · ${loc.label} (~${baseLat.toFixed(2)}, ${baseLon.toFixed(2)})`;
+        }
+      });
+
+      mapMarkersByKey.set(key, { marker, circle, item });
+    }
+
+    if (!mapHasAutoFitted && located.length > 0) {
+      mapHasAutoFitted = true;
+      fitAllMapPins();
+    }
+    setTimeout(() => {
+      if (adminMap) adminMap.invalidateSize();
+    }, 50);
   }
 
   function getNextPrintNumber() {
@@ -1000,6 +1286,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       const timeStr = getFormattedTimestamp();
       const postponed = isCurrentlyPostponed();
       const uid = 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+      const roughLocation = await getRoughLocationForSubmit();
 
       const itemRecord = {
         uid,
@@ -1010,6 +1297,9 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
         time: timeStr,
         status: postponed ? 'postponed' : 'queued'
       };
+      if (roughLocation) {
+        itemRecord.location = roughLocation;
+      }
 
       // Save immediately to archive first so the idea is NEVER lost even if network/printer hiccups
       savedItems = mergeSavedItems(savedItems, [itemRecord]);
