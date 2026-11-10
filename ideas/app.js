@@ -68,11 +68,23 @@
     });
     setInterval(updateLiveTimestamp, 15000);
     setInterval(() => {
+      if (document.hidden) return;
+      const isAdminOpen = adminSection && !adminSection.classList.contains('hidden');
+      const hasPendingWork = postponeUntil > 0 || savedItems.some(it => it.status === 'postponed' || it.status === 'queued');
+      if (!isAdminOpen && !hasPendingWork) return;
       fetchRemoteQuotaState().then(() => {
         checkAndFlushPostponed();
         syncUnconfirmedQuoteStatuses();
       });
-    }, 25000);
+    }, 30000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        fetchRemoteQuotaState().then(() => {
+          checkAndFlushPostponed();
+          syncUnconfirmedQuoteStatuses();
+        });
+      }
+    });
   }
 
   async function sha256Hex(str) {
@@ -526,6 +538,7 @@
     const data = await res.json();
     if (data && data.id) {
       item.quoteId = data.id;
+      savedItems = mergeSavedItems(savedItems, [item]);
     }
     return data.id;
   }
@@ -550,7 +563,9 @@
 
         if (st.status === 'printed') {
           item.status = 'printed';
+          item.statusUpdatedAt = Date.now();
           delete item.error;
+          savedItems = mergeSavedItems(savedItems, [item]);
           await persistRemoteState();
           renderAdminUI();
           showFeedback(
@@ -569,7 +584,9 @@
             continue;
           } else {
             item.status = 'failed';
+            item.statusUpdatedAt = Date.now();
             item.error = st.error || 'Printer offline';
+            savedItems = mergeSavedItems(savedItems, [item]);
             await persistRemoteState();
             renderAdminUI();
             showFeedback(
@@ -584,6 +601,7 @@
     }
 
     // Still pending in queue (printer will pick it up on next poll or when online)
+    savedItems = mergeSavedItems(savedItems, [item]);
     await persistRemoteState();
     renderAdminUI();
     showFeedback(
