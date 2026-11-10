@@ -16,6 +16,7 @@
     "highlight.js": "^11.11.0",
     "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
-    "marked": "^15.0.0"
+    "marked": "^15.0.0",
+    "obscenity": "^0.4.6"
   }
 }
