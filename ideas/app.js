@@ -895,7 +895,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       zoomControl: true
     });
 
-    leafletLib.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    leafletLib.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_55ua_1_e9e08f4c90f2b40c085a2a17', {
       subdomains: 'abcd',
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap &copy; CARTO'
