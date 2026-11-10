@@ -18,7 +18,6 @@ import {
 
 const customDataset = new DataSet()
   .addAll(englishDataset)
-  .addPhrase((p) => p.setMetadata({ originalWord: 'vibrator' }).addPattern(pattern`|vibrator|`).addPattern(pattern`|vibrators|`))
   .addPhrase((p) => p.setMetadata({ originalWord: 'scrotum' }).addPattern(pattern`scrotum`))
   .addPhrase((p) => p.setMetadata({ originalWord: 'kys' }).addPattern(pattern`|kys|`))
   .addPhrase((p) => p.setMetadata({ originalWord: 'cockhead' }).addPattern(pattern`cockhead`))
