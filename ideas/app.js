@@ -1,3 +1,5 @@
+import { checkSubmissionProfanity } from './profanityFilter.js';
+
 (function () {
   'use strict';
 
@@ -156,9 +158,18 @@
     if (feedbackDesc) feedbackDesc.textContent = desc;
   }
 
+  function clearErrorFeedback() {
+    setStatus('');
+    if (feedbackBox && feedbackBox.classList.contains('error')) {
+      feedbackBox.classList.add('hidden');
+      feedbackBox.classList.remove('error');
+    }
+  }
+
   function setupEventListeners() {
     projectTitle.addEventListener('input', () => {
       clearSentPreviewHighlight();
+      clearErrorFeedback();
       const val = projectTitle.value.trim();
       titleCharCount.textContent = `${projectTitle.value.length}/80`;
       previewTitle.textContent = val.length > 0 ? val : SAMPLE_TITLE;
@@ -166,6 +177,7 @@
 
     projectDescription.addEventListener('input', () => {
       clearSentPreviewHighlight();
+      clearErrorFeedback();
       const val = projectDescription.value.trim();
       descCharCount.textContent = `${projectDescription.value.length}/500`;
       previewDescription.textContent = val.length > 0 ? val : SAMPLE_DESC;
@@ -173,6 +185,7 @@
 
     projectAuthor.addEventListener('input', () => {
       clearSentPreviewHighlight();
+      clearErrorFeedback();
       const val = projectAuthor.value.trim();
       authorCharCount.textContent = `${projectAuthor.value.length}/35`;
       previewAuthor.textContent = val.length > 0 ? val : 'Anonymous';
@@ -952,6 +965,20 @@
     if (descVal.length < 3) {
       setStatus('Enter a description.', true);
       projectDescription.focus();
+      return;
+    }
+
+    const filterResult = checkSubmissionProfanity({
+      title: titleVal,
+      description: descVal,
+      author: authorVal
+    });
+    if (!filterResult.clean) {
+      setStatus(filterResult.message, true);
+      showFeedback('error', 'Message Blocked by Content Filter', filterResult.message);
+      if (filterResult.field === 'title') projectTitle.focus();
+      else if (filterResult.field === 'description') projectDescription.focus();
+      else if (filterResult.field === 'author') projectAuthor.focus();
       return;
     }
 
