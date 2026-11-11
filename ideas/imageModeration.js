@@ -46,8 +46,8 @@ async function tryEdgeVisionReview(workerBaseUrl, dataUrl) {
     if (data && data.reviewed === true && typeof data.allowed === 'boolean') {
       return {
         allowed: data.allowed,
-        reason: data.reason || (data.allowed ? '' : 'Image rejected by AI safety review.'),
-        source: 'edge-ai',
+        reason: data.reason || (data.allowed ? '' : 'This image cannot be printed. Please choose a different image.'),
+        source: 'edge',
       };
     }
     return null;
@@ -101,23 +101,23 @@ export async function moderateImage(imgEl, workerBaseUrl) {
     const porn = scores.Porn || 0;
     const hentai = scores.Hentai || 0;
     const isExtremeExplicit =
-      porn >= 0.88 ||
-      hentai >= 0.92 ||
-      (porn >= 0.55 && porn + hentai >= 0.92);
+      porn >= 0.95 ||
+      hentai >= 0.96 ||
+      (porn >= 0.78 && porn + hentai >= 0.96);
 
     if (isExtremeExplicit) {
       return {
         allowed: false,
-        reason: 'Image blocked by AI review (only non-explicit content is allowed).',
-        source: 'local-ai',
+        reason: 'This image cannot be printed. Please choose a different image.',
+        source: 'local',
       };
     }
-    return { allowed: true, source: 'local-ai' };
+    return { allowed: true, source: 'local' };
   } catch (err) {
-    console.warn('Local AI image review unavailable:', err);
+    console.warn('Image verification unavailable:', err);
     return {
       allowed: false,
-      reason: 'Could not complete AI image safety check. Please try again.',
+      reason: 'Could not process this image. Please try another image.',
       source: 'error',
     };
   }

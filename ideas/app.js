@@ -26,6 +26,7 @@ import { moderateImage } from './imageModeration.js';
   let attachedImageEl = null;
   let attachedImageThumb = null;
   let attachedImageReviewPromise = null;
+  let imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false };
   const fullResPrintImages = new Map(); // uid -> HTMLImageElement (in-memory for current session)
 
   const form = document.getElementById('ideaForm');
@@ -37,6 +38,14 @@ import { moderateImage } from './imageModeration.js';
   const btnClearImage = document.getElementById('btnClearImage');
   const imageFileMeta = document.getElementById('imageFileMeta');
   const imageLimitCount = document.getElementById('imageLimitCount');
+  const imageEditPanel = document.getElementById('imageEditPanel');
+  const imgBrightness = document.getElementById('imgBrightness');
+  const imgBrightnessVal = document.getElementById('imgBrightnessVal');
+  const imgContrast = document.getElementById('imgContrast');
+  const imgContrastVal = document.getElementById('imgContrastVal');
+  const btnImgMode = document.getElementById('btnImgMode');
+  const btnImgInvert = document.getElementById('btnImgInvert');
+  const btnImgReset = document.getElementById('btnImgReset');
   const titleCharCount = document.getElementById('titleCharCount');
   const descCharCount = document.getElementById('descCharCount');
   const authorCharCount = document.getElementById('authorCharCount');
@@ -50,13 +59,7 @@ import { moderateImage } from './imageModeration.js';
 
   const previewHeaderLabel = document.getElementById('previewHeaderLabel');
   const thermalPreviewCard = document.getElementById('thermalPreviewCard');
-  const previewTitle = document.getElementById('previewTitle');
-  const previewDescription = document.getElementById('previewDescription');
-  const previewImageWrap = document.getElementById('previewImageWrap');
-  const previewImage = document.getElementById('previewImage');
-  const previewAuthor = document.getElementById('previewAuthor');
-  const previewTimestamp = document.getElementById('previewTimestamp');
-  const previewNumber = document.getElementById('previewNumber');
+  const previewCanvas = document.getElementById('previewCanvas');
 
   // Admin DOM
   const adminSection = document.getElementById('adminSection');
@@ -90,8 +93,11 @@ import { moderateImage } from './imageModeration.js';
   function init() {
     setupEventListeners();
     initAdminAccess();
-    updateLiveTimestamp();
     syncUIQuotaState();
+    renderLivePreviewCanvas();
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => renderLivePreviewCanvas());
+    }
     geoLookupPromise = resolveRoughLocation();
     fetchRemoteQuotaState().then(() => {
       checkAndFlushPostponed();
@@ -161,47 +167,72 @@ import { moderateImage } from './imageModeration.js';
     if (!showingSentPreview) return;
     showingSentPreview = false;
     if (previewHeaderLabel) {
-      previewHeaderLabel.textContent = 'Preview';
+      previewHeaderLabel.textContent = 'Preview (1:1 Print)';
       previewHeaderLabel.classList.remove('sent');
     }
     if (thermalPreviewCard) {
       thermalPreviewCard.classList.remove('sent');
     }
-    const nextNum = getNextPrintNumber();
-    if (previewNumber) {
-      previewNumber.textContent = `#${nextNum} / ${GLOBAL_MAX}`;
-    }
-    const tVal = projectTitle.value.trim();
-    const dVal = projectDescription.value.trim();
-    const aVal = projectAuthor.value.trim();
-    previewTitle.textContent = tVal.length > 0 ? tVal : SAMPLE_TITLE;
-    previewDescription.textContent = dVal.length > 0 ? dVal : SAMPLE_DESC;
-    previewAuthor.textContent = aVal.length > 0 ? aVal : 'Anonymous';
-    updatePreviewImageSlot(attachedImageThumb);
+    renderLivePreviewCanvas();
   }
 
-  function updatePreviewImageSlot(src) {
-    if (!previewImageWrap || !previewImage) return;
-    if (src) {
-      previewImage.src = src;
-      previewImageWrap.classList.remove('hidden');
-      if (thermalPreviewCard) thermalPreviewCard.classList.add('has-image');
-    } else {
-      previewImage.removeAttribute('src');
-      previewImageWrap.classList.add('hidden');
-      if (thermalPreviewCard) thermalPreviewCard.classList.remove('has-image');
+  let previewRafId = null;
+  function scheduleLivePreviewRender() {
+    if (previewRafId) return;
+    previewRafId = requestAnimationFrame(() => {
+      previewRafId = null;
+      renderLivePreviewCanvas();
+    });
+  }
+
+  function renderLivePreviewCanvas() {
+    if (!previewCanvas || showingSentPreview) return;
+    const tVal = projectTitle.value.trim() || SAMPLE_TITLE;
+    const dVal = projectDescription.value.trim() || SAMPLE_DESC;
+    const aVal = projectAuthor.value.trim() || 'Anonymous';
+    const nextNum = getNextPrintNumber();
+    renderLabelToCanvas(
+      previewCanvas,
+      tVal,
+      dVal,
+      aVal,
+      getFormattedTimestamp(),
+      nextNum,
+      attachedImageEl,
+      imageEdit
+    );
+  }
+
+  function syncImageEditControlsUI() {
+    if (imgBrightness) imgBrightness.value = String(imageEdit.brightness);
+    if (imgBrightnessVal) imgBrightnessVal.textContent = (imageEdit.brightness > 0 ? `+${imageEdit.brightness}` : String(imageEdit.brightness));
+    if (imgContrast) imgContrast.value = imageEdit.contrast.toFixed(2);
+    if (imgContrastVal) imgContrastVal.textContent = imageEdit.contrast.toFixed(2);
+    if (btnImgMode) {
+      btnImgMode.textContent = imageEdit.mode === 'dither' ? 'Photo dither' : 'Sharp B&W';
+      btnImgMode.classList.toggle('active', imageEdit.mode === 'dither');
     }
+    if (btnImgInvert) {
+      btnImgInvert.classList.toggle('active', imageEdit.invert);
+    }
+  }
+
+  function resetImageEditDefaults() {
+    imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false };
+    syncImageEditControlsUI();
   }
 
   function clearAttachedImage(updatePreview = true) {
     attachedImageEl = null;
     attachedImageThumb = null;
     attachedImageReviewPromise = null;
+    resetImageEditDefaults();
     if (projectImage) projectImage.value = '';
     if (imageFileMeta) imageFileMeta.textContent = 'None attached';
     if (imageLimitCount) imageLimitCount.textContent = '0/1';
     if (btnClearImage) btnClearImage.classList.add('hidden');
-    if (updatePreview) updatePreviewImageSlot(null);
+    if (imageEditPanel) imageEditPanel.classList.add('hidden');
+    if (updatePreview) renderLivePreviewCanvas();
   }
 
   function loadImageFromSrc(src) {
@@ -213,9 +244,18 @@ import { moderateImage } from './imageModeration.js';
     });
   }
 
-  function ditherImageToCanvas(sourceImg, targetW, targetH) {
+  /**
+   * Renders an image to 1-bit monochrome printhead dots using serpentine Floyd-Steinberg
+   * dithering or crisp thresholding, applying user B/W balance, contrast, and inversion.
+   */
+  function ditherImageToCanvas(sourceImg, targetW, targetH, opts = {}) {
     const w = Math.max(1, Math.round(targetW));
     const h = Math.max(1, Math.round(targetH));
+    const brightness = Number.isFinite(opts.brightness) ? opts.brightness : 0;
+    const contrast = Number.isFinite(opts.contrast) ? opts.contrast : 1.1;
+    const mode = opts.mode || 'dither';
+    const invert = !!opts.invert;
+
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
@@ -228,27 +268,65 @@ import { moderateImage } from './imageModeration.js';
 
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
-    const gray = new Float32Array(w * h);
+    const baseGray = new Float32Array(w * h);
 
     for (let i = 0; i < data.length; i += 4) {
       const a = data[i + 3];
-      gray[i / 4] = a < 64
+      let lum = a < 64
         ? 255
         : 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+      if (invert) lum = 255 - lum;
+      lum = (lum - 128) * contrast + 128 + brightness;
+      baseGray[i / 4] = lum < 0 ? 0 : lum > 255 ? 255 : lum;
     }
 
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = y * w + x;
-        const oldVal = gray[idx];
-        const newVal = oldVal < 128 ? 0 : 255;
-        gray[idx] = newVal;
-        const err = oldVal - newVal;
+    const gray = new Float32Array(baseGray);
 
-        if (x + 1 < w) gray[idx + 1] += (err * 7) / 16;
-        if (x - 1 >= 0 && y + 1 < h) gray[(y + 1) * w + (x - 1)] += (err * 3) / 16;
-        if (y + 1 < h) gray[(y + 1) * w + x] += (err * 5) / 16;
-        if (x + 1 < w && y + 1 < h) gray[(y + 1) * w + (x + 1)] += (err * 1) / 16;
+    if (mode === 'dither') {
+      // Subtle detail sharpening before dithering for crisper 203 DPI thermal dots
+      const sharp = new Float32Array(gray.length);
+      const amount = 0.25;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          if (x === 0 || y === 0 || x === w - 1 || y === h - 1) {
+            sharp[idx] = gray[idx];
+          } else {
+            const blur = (gray[idx - 1] + gray[idx + 1] + gray[idx - w] + gray[idx + w]) * 0.25;
+            const v = gray[idx] + (gray[idx] - blur) * amount;
+            sharp[idx] = v < 0 ? 0 : v > 255 ? 255 : v;
+          }
+        }
+      }
+
+      // Serpentine Floyd-Steinberg error diffusion (reduces directional worm artifacts)
+      for (let y = 0; y < h; y++) {
+        const leftToRight = (y & 1) === 0;
+        const startX = leftToRight ? 0 : w - 1;
+        const endX = leftToRight ? w : -1;
+        const step = leftToRight ? 1 : -1;
+
+        for (let x = startX; x !== endX; x += step) {
+          const idx = y * w + x;
+          const oldVal = sharp[idx];
+          const newVal = oldVal < 128 ? 0 : 255;
+          sharp[idx] = newVal;
+          const err = oldVal - newVal;
+
+          if (x + step >= 0 && x + step < w) sharp[idx + step] += (err * 7) / 16;
+          if (y + 1 < h) {
+            const nextRow = (y + 1) * w;
+            if (x - step >= 0 && x - step < w) sharp[nextRow + x - step] += (err * 3) / 16;
+            sharp[nextRow + x] += (err * 5) / 16;
+            if (x + step >= 0 && x + step < w) sharp[nextRow + x + step] += (err * 1) / 16;
+          }
+        }
+      }
+      gray.set(sharp);
+    } else {
+      for (let i = 0; i < gray.length; i++) {
+        gray[i] = gray[i] < 128 ? 0 : 255;
       }
     }
 
@@ -290,23 +368,33 @@ import { moderateImage } from './imageModeration.js';
       const srcW = img.naturalWidth || img.width || 1;
       const srcH = img.naturalHeight || img.height || 1;
 
-      // Normalize huge photos cleanly for printing & generate a compact dithered thumb for preview/archive
-      const thumbScale = Math.min(1, 360 / Math.max(srcW, srcH));
-      const thumbW = Math.max(16, Math.round(srcW * thumbScale));
-      const thumbH = Math.max(16, Math.round(srcH * thumbScale));
-      const thumbCanvas = ditherImageToCanvas(img, thumbW, thumbH);
+      // Save high-detail source scaled to printhead dot width (~736px max) as JPEG for KV archive & sharp reprints
+      const storeScale = Math.min(1, 740 / Math.max(srcW, srcH));
+      const storeW = Math.max(16, Math.round(srcW * storeScale));
+      const storeH = Math.max(16, Math.round(srcH * storeScale));
+      const storeCanvas = document.createElement('canvas');
+      storeCanvas.width = storeW;
+      storeCanvas.height = storeH;
+      const storeCtx = storeCanvas.getContext('2d');
+      storeCtx.fillStyle = '#FFFFFF';
+      storeCtx.fillRect(0, 0, storeW, storeH);
+      storeCtx.imageSmoothingEnabled = true;
+      storeCtx.imageSmoothingQuality = 'high';
+      storeCtx.drawImage(img, 0, 0, storeW, storeH);
 
+      resetImageEditDefaults();
       attachedImageEl = img;
-      attachedImageThumb = thumbCanvas.toDataURL('image/png');
+      attachedImageThumb = storeCanvas.toDataURL('image/jpeg', 0.84);
       if (imageFileMeta) {
         const cleanName = file.name.length > 24 ? file.name.slice(0, 21) + '...' : file.name;
         imageFileMeta.textContent = `${cleanName} (${srcW}×${srcH})`;
       }
       if (imageLimitCount) imageLimitCount.textContent = '1/1';
       if (btnClearImage) btnClearImage.classList.remove('hidden');
-      updatePreviewImageSlot(attachedImageThumb);
+      if (imageEditPanel) imageEditPanel.classList.remove('hidden');
+      renderLivePreviewCanvas();
 
-      // Start AI image safety check immediately in background
+      // Pre-check image silently in background
       attachedImageReviewPromise = moderateImage(img, WORKER_BASE_URL);
     } catch (err) {
       clearAttachedImage();
@@ -334,25 +422,22 @@ import { moderateImage } from './imageModeration.js';
     projectTitle.addEventListener('input', () => {
       clearSentPreviewHighlight();
       clearErrorFeedback();
-      const val = projectTitle.value.trim();
       titleCharCount.textContent = `${projectTitle.value.length}/80`;
-      previewTitle.textContent = val.length > 0 ? val : SAMPLE_TITLE;
+      scheduleLivePreviewRender();
     });
 
     projectDescription.addEventListener('input', () => {
       clearSentPreviewHighlight();
       clearErrorFeedback();
-      const val = projectDescription.value.trim();
       descCharCount.textContent = `${projectDescription.value.length}/500`;
-      previewDescription.textContent = val.length > 0 ? val : SAMPLE_DESC;
+      scheduleLivePreviewRender();
     });
 
     projectAuthor.addEventListener('input', () => {
       clearSentPreviewHighlight();
       clearErrorFeedback();
-      const val = projectAuthor.value.trim();
       authorCharCount.textContent = `${projectAuthor.value.length}/35`;
-      previewAuthor.textContent = val.length > 0 ? val : 'Anonymous';
+      scheduleLivePreviewRender();
     });
 
     if (btnChooseImage && projectImage) {
@@ -370,6 +455,50 @@ import { moderateImage } from './imageModeration.js';
         clearSentPreviewHighlight();
         clearErrorFeedback();
         clearAttachedImage();
+      });
+    }
+
+    if (imgBrightness) {
+      imgBrightness.addEventListener('input', () => {
+        clearSentPreviewHighlight();
+        imageEdit.brightness = parseInt(imgBrightness.value, 10) || 0;
+        syncImageEditControlsUI();
+        scheduleLivePreviewRender();
+      });
+    }
+
+    if (imgContrast) {
+      imgContrast.addEventListener('input', () => {
+        clearSentPreviewHighlight();
+        imageEdit.contrast = parseFloat(imgContrast.value) || 1.0;
+        syncImageEditControlsUI();
+        scheduleLivePreviewRender();
+      });
+    }
+
+    if (btnImgMode) {
+      btnImgMode.addEventListener('click', () => {
+        clearSentPreviewHighlight();
+        imageEdit.mode = imageEdit.mode === 'dither' ? 'threshold' : 'dither';
+        syncImageEditControlsUI();
+        renderLivePreviewCanvas();
+      });
+    }
+
+    if (btnImgInvert) {
+      btnImgInvert.addEventListener('click', () => {
+        clearSentPreviewHighlight();
+        imageEdit.invert = !imageEdit.invert;
+        syncImageEditControlsUI();
+        renderLivePreviewCanvas();
+      });
+    }
+
+    if (btnImgReset) {
+      btnImgReset.addEventListener('click', () => {
+        clearSentPreviewHighlight();
+        resetImageEditDefaults();
+        renderLivePreviewCanvas();
       });
     }
 
@@ -597,6 +726,7 @@ import { moderateImage } from './imageModeration.js';
           quoteId: item.quoteId || prev.quoteId,
           location: item.location || prev.location,
           imageThumb: item.imageThumb || prev.imageThumb,
+          imageEdit: item.imageEdit || prev.imageEdit,
           statusUpdatedAt: Math.max(prevTs, nextTs),
           status: chosenStatus
         };
@@ -790,7 +920,7 @@ import { moderateImage } from './imageModeration.js';
         imgEl = null;
       }
     }
-    const bmp = renderLabelBitmap(item.title, item.description, item.author, item.time, item.num, imgEl);
+    const bmp = renderLabelBitmap(item.title, item.description, item.author, item.time, item.num, imgEl, item.imageEdit || {});
     const res = await fetch(`${WORKER_BASE_URL}/api/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -799,7 +929,7 @@ import { moderateImage } from './imageModeration.js';
         text: `${item.title} - ${item.description}`,
         author: item.author,
         imageData: bmp,
-        speed: 2.0,
+        speed: imgEl ? 1.5 : 2.0,
         density: 12
       })
     });
@@ -959,13 +1089,33 @@ import { moderateImage } from './imageModeration.js';
       btnPrev.type = 'button';
       btnPrev.className = 'admin-btn';
       btnPrev.textContent = 'Preview';
-      btnPrev.addEventListener('click', () => {
-        previewTitle.textContent = item.title;
-        previewDescription.textContent = item.description;
-        previewAuthor.textContent = item.author;
-        previewTimestamp.textContent = item.time;
-        previewNumber.textContent = `#${item.num} / ${GLOBAL_MAX}`;
-        updatePreviewImageSlot(item.imageThumb || null);
+      btnPrev.addEventListener('click', async () => {
+        let previewImgEl = (item.uid && fullResPrintImages.get(item.uid)) || null;
+        if (!previewImgEl && item.imageThumb) {
+          try {
+            previewImgEl = await loadImageFromSrc(item.imageThumb);
+          } catch (e) {
+            previewImgEl = null;
+          }
+        }
+        showingSentPreview = true;
+        if (previewHeaderLabel) {
+          previewHeaderLabel.textContent = `Preview (#${item.num} / ${GLOBAL_MAX})`;
+          previewHeaderLabel.classList.remove('sent');
+        }
+        if (thermalPreviewCard) thermalPreviewCard.classList.remove('sent');
+        if (previewCanvas) {
+          renderLabelToCanvas(
+            previewCanvas,
+            item.title,
+            item.description,
+            item.author,
+            item.time,
+            item.num,
+            previewImgEl,
+            item.imageEdit || {}
+          );
+        }
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
 
@@ -1236,14 +1386,11 @@ import { moderateImage } from './imageModeration.js';
 
   function syncUIQuotaState() {
     globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
-    const nextNum = getNextPrintNumber();
 
     if (globalQuotaText) {
       globalQuotaText.textContent = `${globalTotalPrints}/${GLOBAL_MAX} printed`;
     }
-    if (previewNumber && !showingSentPreview) {
-      previewNumber.textContent = `#${nextNum} / ${GLOBAL_MAX}`;
-    }
+    renderLivePreviewCanvas();
 
     if (globalPrintsRemaining <= 0) {
       disableFormInputs('400/400 limit reached');
@@ -1285,8 +1432,7 @@ import { moderateImage } from './imageModeration.js';
   }
 
   function updateLiveTimestamp() {
-    if (!previewTimestamp) return;
-    previewTimestamp.textContent = getFormattedTimestamp();
+    renderLivePreviewCanvas();
   }
 
   function setStatus(msg, isError = false) {
@@ -1342,15 +1488,18 @@ import { moderateImage } from './imageModeration.js';
     return lines;
   }
 
-  function renderLabelBitmap(title, description, handle, timeStr, printNum, imageEl = null) {
+  /**
+   * Renders the exact 800x1200 (203 DPI 4x6") 1-bit monochrome thermal printhead label onto any canvas.
+   * Used identically for both the live 1:1 preview and the actual bitmap sent to the printer.
+   */
+  function renderLabelToCanvas(canvas, title, description, handle, timeStr, printNum, imageEl = null, editOpts = {}) {
     const W = 800;
     const H = 1200;
-    const PAD = 48;
+    const PAD = imageEl ? 36 : 48;
     const CONTENT_W = W - PAD * 2;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
+    if (canvas.width !== W) canvas.width = W;
+    if (canvas.height !== H) canvas.height = H;
     const ctx = canvas.getContext('2d');
 
     ctx.fillStyle = '#FFFFFF';
@@ -1370,26 +1519,26 @@ import { moderateImage } from './imageModeration.js';
     }
 
     // Top divider
-    curY += 20;
+    curY += 18;
     ctx.fillRect(PAD, curY, CONTENT_W, 2);
-    curY += 32;
+    curY += 28;
 
     // 2. Description & details
     ctx.font = '400 33px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const descLines = wrapCanvasText(ctx, description, CONTENT_W);
-    const maxDescY = imageEl ? 680 : 990;
+    const maxDescY = imageEl ? 640 : 990;
     for (const line of descLines) {
       if (curY + 48 > maxDescY) break;
       if (line !== '') {
         ctx.fillText(line, PAD, curY);
       }
-      curY += 50;
+      curY += 48;
     }
 
-    // Optional Floyd-Steinberg dithered image
+    // Optional native-dot 1:1 dithered image (aspect ratio preserved, zero stretching)
     if (imageEl) {
       const imgTopY = curY + 14;
-      const maxImgBottom = 1018;
+      const maxImgBottom = 1020;
       const availH = maxImgBottom - imgTopY;
       const srcW = imageEl.naturalWidth || imageEl.width || 1;
       const srcH = imageEl.naturalHeight || imageEl.height || 1;
@@ -1399,7 +1548,7 @@ import { moderateImage } from './imageModeration.js';
         const drawH = Math.max(16, Math.round(srcH * scale));
         const drawX = PAD + Math.round((CONTENT_W - drawW) / 2);
         const drawY = imgTopY + Math.round((availH - drawH) / 2);
-        const ditheredCanvas = ditherImageToCanvas(imageEl, drawW, drawH);
+        const ditheredCanvas = ditherImageToCanvas(imageEl, drawW, drawH, editOpts);
         ctx.drawImage(ditheredCanvas, drawX, drawY);
       }
     }
@@ -1433,7 +1582,11 @@ import { moderateImage } from './imageModeration.js';
       d[i + 3] = 255;
     }
     ctx.putImageData(imgData, 0, 0);
+  }
 
+  function renderLabelBitmap(title, description, handle, timeStr, printNum, imageEl = null, editOpts = {}) {
+    const canvas = document.createElement('canvas');
+    renderLabelToCanvas(canvas, title, description, handle, timeStr, printNum, imageEl, editOpts);
     return canvas.toDataURL('image/png');
   }
 
@@ -1472,27 +1625,25 @@ import { moderateImage } from './imageModeration.js';
 
     const submittedImgEl = attachedImageEl;
     const submittedImgThumb = attachedImageThumb;
+    const submittedImgEdit = { ...imageEdit };
 
     isSubmitting = true;
     btnSubmitIdea.disabled = true;
-    btnSubmitIdea.textContent = submittedImgEl ? 'Reviewing image...' : 'Sending to printer...';
+    btnSubmitIdea.textContent = 'Sending to printer...';
     setStatus('');
+    showFeedback('sending', 'Sending your idea...', 'Saving your message to Noah\'s printer queue...');
 
     if (submittedImgEl) {
-      showFeedback('sending', 'AI Reviewing Image...', 'Checking your image before sending to the printer...');
       const reviewResult = await (attachedImageReviewPromise || moderateImage(submittedImgEl, WORKER_BASE_URL));
       if (!reviewResult.allowed) {
         isSubmitting = false;
         syncUIQuotaState();
-        const msg = reviewResult.reason || 'Image rejected by AI safety review.';
+        const msg = reviewResult.reason || 'This image cannot be printed. Please choose a different image.';
         setStatus(msg, true);
-        showFeedback('error', 'Image Blocked by AI Review', msg);
+        showFeedback('error', 'Image Not Allowed', msg);
         return;
       }
-      btnSubmitIdea.textContent = 'Sending to printer...';
     }
-
-    showFeedback('sending', 'Sending your idea...', 'Saving your message to Noah\'s printer queue...');
 
     try {
       await fetchRemoteQuotaState();
@@ -1522,6 +1673,7 @@ import { moderateImage } from './imageModeration.js';
       }
       if (submittedImgThumb) {
         itemRecord.imageThumb = submittedImgThumb;
+        itemRecord.imageEdit = submittedImgEdit;
         fullResPrintImages.set(uid, submittedImgEl);
       }
 
@@ -1531,14 +1683,20 @@ import { moderateImage } from './imageModeration.js';
       globalPrintsRemaining = Math.max(0, GLOBAL_MAX - globalTotalPrints);
       await persistRemoteState();
 
-      // Keep the user's submitted card visible in the Preview box with a "Sent" highlight
+      // Keep the user's submitted 1:1 card visible in the Preview canvas with a "Sent" highlight
       showingSentPreview = true;
-      previewTitle.textContent = itemRecord.title;
-      previewDescription.textContent = itemRecord.description;
-      previewAuthor.textContent = itemRecord.author;
-      previewTimestamp.textContent = itemRecord.time;
-      previewNumber.textContent = `#${itemRecord.num} / ${GLOBAL_MAX}`;
-      updatePreviewImageSlot(submittedImgThumb || null);
+      if (previewCanvas) {
+        renderLabelToCanvas(
+          previewCanvas,
+          itemRecord.title,
+          itemRecord.description,
+          itemRecord.author,
+          itemRecord.time,
+          itemRecord.num,
+          submittedImgEl || null,
+          submittedImgEdit
+        );
+      }
       if (previewHeaderLabel) {
         previewHeaderLabel.textContent = `Preview — Sent (#${itemRecord.num} / ${GLOBAL_MAX})`;
         previewHeaderLabel.classList.add('sent');
