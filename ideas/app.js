@@ -1,4 +1,5 @@
 import { checkSubmissionProfanity } from './profanityFilter.js';
+import { moderateImage } from './imageModeration.js';
 
 (function () {
   'use strict';
@@ -10,8 +11,8 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
   const ADMIN_SHA256 = '5f1f508821ed53e6cf4d387514c8a904ca53dcbda1a25b14533a96c8b641f113';
   const GLOBAL_MAX = 400;
 
-  const SAMPLE_TITLE = 'Toaster that catapults toast onto your plate';
-  const SAMPLE_DESC = "Finds your plate on the table and launches the toast right onto it when it's done.";
+  const SAMPLE_TITLE = 'Project title';
+  const SAMPLE_DESC = 'Write a short description of your project idea...';
 
   let globalTotalPrints = 0;
   let globalPrintsRemaining = GLOBAL_MAX;
@@ -21,10 +22,21 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
   let isFlushing = false;
   let showingSentPreview = false;
 
+  // Uploaded image state (1 max)
+  let attachedImageEl = null;
+  let attachedImageThumb = null;
+  let attachedImageReviewPromise = null;
+  const fullResPrintImages = new Map(); // uid -> HTMLImageElement (in-memory for current session)
+
   const form = document.getElementById('ideaForm');
   const projectTitle = document.getElementById('projectTitle');
   const projectDescription = document.getElementById('projectDescription');
   const projectAuthor = document.getElementById('projectAuthor');
+  const projectImage = document.getElementById('projectImage');
+  const btnChooseImage = document.getElementById('btnChooseImage');
+  const btnClearImage = document.getElementById('btnClearImage');
+  const imageFileMeta = document.getElementById('imageFileMeta');
+  const imageLimitCount = document.getElementById('imageLimitCount');
   const titleCharCount = document.getElementById('titleCharCount');
   const descCharCount = document.getElementById('descCharCount');
   const authorCharCount = document.getElementById('authorCharCount');
@@ -40,6 +52,8 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
   const thermalPreviewCard = document.getElementById('thermalPreviewCard');
   const previewTitle = document.getElementById('previewTitle');
   const previewDescription = document.getElementById('previewDescription');
+  const previewImageWrap = document.getElementById('previewImageWrap');
+  const previewImage = document.getElementById('previewImage');
   const previewAuthor = document.getElementById('previewAuthor');
   const previewTimestamp = document.getElementById('previewTimestamp');
   const previewNumber = document.getElementById('previewNumber');
@@ -163,6 +177,141 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
     previewTitle.textContent = tVal.length > 0 ? tVal : SAMPLE_TITLE;
     previewDescription.textContent = dVal.length > 0 ? dVal : SAMPLE_DESC;
     previewAuthor.textContent = aVal.length > 0 ? aVal : 'Anonymous';
+    updatePreviewImageSlot(attachedImageThumb);
+  }
+
+  function updatePreviewImageSlot(src) {
+    if (!previewImageWrap || !previewImage) return;
+    if (src) {
+      previewImage.src = src;
+      previewImageWrap.classList.remove('hidden');
+      if (thermalPreviewCard) thermalPreviewCard.classList.add('has-image');
+    } else {
+      previewImage.removeAttribute('src');
+      previewImageWrap.classList.add('hidden');
+      if (thermalPreviewCard) thermalPreviewCard.classList.remove('has-image');
+    }
+  }
+
+  function clearAttachedImage(updatePreview = true) {
+    attachedImageEl = null;
+    attachedImageThumb = null;
+    attachedImageReviewPromise = null;
+    if (projectImage) projectImage.value = '';
+    if (imageFileMeta) imageFileMeta.textContent = 'None attached';
+    if (imageLimitCount) imageLimitCount.textContent = '0/1';
+    if (btnClearImage) btnClearImage.classList.add('hidden');
+    if (updatePreview) updatePreviewImageSlot(null);
+  }
+
+  function loadImageFromSrc(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = src;
+    });
+  }
+
+  function ditherImageToCanvas(sourceImg, targetW, targetH) {
+    const w = Math.max(1, Math.round(targetW));
+    const h = Math.max(1, Math.round(targetH));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sourceImg, 0, 0, w, h);
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    const gray = new Float32Array(w * h);
+
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      gray[i / 4] = a < 64
+        ? 255
+        : 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        const oldVal = gray[idx];
+        const newVal = oldVal < 128 ? 0 : 255;
+        gray[idx] = newVal;
+        const err = oldVal - newVal;
+
+        if (x + 1 < w) gray[idx + 1] += (err * 7) / 16;
+        if (x - 1 >= 0 && y + 1 < h) gray[(y + 1) * w + (x - 1)] += (err * 3) / 16;
+        if (y + 1 < h) gray[(y + 1) * w + x] += (err * 5) / 16;
+        if (x + 1 < w && y + 1 < h) gray[(y + 1) * w + (x + 1)] += (err * 1) / 16;
+      }
+    }
+
+    for (let i = 0; i < gray.length; i++) {
+      const v = gray[i] < 128 ? 0 : 255;
+      const idx = i * 4;
+      data[idx] = v;
+      data[idx + 1] = v;
+      data[idx + 2] = v;
+      data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    return c;
+  }
+
+  async function handleImageSelected(file) {
+    clearSentPreviewHighlight();
+    clearErrorFeedback();
+    if (!file) {
+      clearAttachedImage();
+      return;
+    }
+    if (!file.type || !file.type.startsWith('image/')) {
+      clearAttachedImage();
+      setStatus('Select a valid image file (PNG, JPG, WebP, GIF).', true);
+      return;
+    }
+
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Failed to read image file'));
+        reader.readAsDataURL(file);
+      });
+
+      const img = await loadImageFromSrc(dataUrl);
+      const srcW = img.naturalWidth || img.width || 1;
+      const srcH = img.naturalHeight || img.height || 1;
+
+      // Normalize huge photos cleanly for printing & generate a compact dithered thumb for preview/archive
+      const thumbScale = Math.min(1, 360 / Math.max(srcW, srcH));
+      const thumbW = Math.max(16, Math.round(srcW * thumbScale));
+      const thumbH = Math.max(16, Math.round(srcH * thumbScale));
+      const thumbCanvas = ditherImageToCanvas(img, thumbW, thumbH);
+
+      attachedImageEl = img;
+      attachedImageThumb = thumbCanvas.toDataURL('image/png');
+      if (imageFileMeta) {
+        const cleanName = file.name.length > 24 ? file.name.slice(0, 21) + '...' : file.name;
+        imageFileMeta.textContent = `${cleanName} (${srcW}×${srcH})`;
+      }
+      if (imageLimitCount) imageLimitCount.textContent = '1/1';
+      if (btnClearImage) btnClearImage.classList.remove('hidden');
+      updatePreviewImageSlot(attachedImageThumb);
+
+      // Start AI image safety check immediately in background
+      attachedImageReviewPromise = moderateImage(img, WORKER_BASE_URL);
+    } catch (err) {
+      clearAttachedImage();
+      setStatus(err.message || 'Could not load image.', true);
+    }
   }
 
   function showFeedback(state, title, desc) {
@@ -205,6 +354,24 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       authorCharCount.textContent = `${projectAuthor.value.length}/35`;
       previewAuthor.textContent = val.length > 0 ? val : 'Anonymous';
     });
+
+    if (btnChooseImage && projectImage) {
+      btnChooseImage.addEventListener('click', () => {
+        projectImage.click();
+      });
+      projectImage.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        handleImageSelected(file);
+      });
+    }
+
+    if (btnClearImage) {
+      btnClearImage.addEventListener('click', () => {
+        clearSentPreviewHighlight();
+        clearErrorFeedback();
+        clearAttachedImage();
+      });
+    }
 
     form.addEventListener('submit', handleSubmit);
 
@@ -429,6 +596,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
           ...item,
           quoteId: item.quoteId || prev.quoteId,
           location: item.location || prev.location,
+          imageThumb: item.imageThumb || prev.imageThumb,
           statusUpdatedAt: Math.max(prevTs, nextTs),
           status: chosenStatus
         };
@@ -614,7 +782,15 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
   }
 
   async function sendItemToPrinter(item) {
-    const bmp = renderLabelBitmap(item.title, item.description, item.author, item.time, item.num);
+    let imgEl = (item.uid && fullResPrintImages.get(item.uid)) || null;
+    if (!imgEl && item.imageThumb) {
+      try {
+        imgEl = await loadImageFromSrc(item.imageThumb);
+      } catch (e) {
+        imgEl = null;
+      }
+    }
+    const bmp = renderLabelBitmap(item.title, item.description, item.author, item.time, item.num, imgEl);
     const res = await fetch(`${WORKER_BASE_URL}/api/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -754,7 +930,8 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       const badge = document.createElement('span');
       const isPendingOrFailed = item.status === 'postponed' || item.status === 'failed' || item.status === 'queued';
       badge.className = 'archive-badge' + (isPendingOrFailed ? ' held' : '');
-      badge.textContent = item.error ? `[${item.status}: ${item.error}]` : `[${item.status || 'printed'}]`;
+      const statusText = item.error ? `[${item.status}: ${item.error}]` : `[${item.status || 'printed'}]`;
+      badge.textContent = item.imageThumb ? `${statusText} [img]` : statusText;
 
       top.appendChild(numSpan);
       top.appendChild(titleSpan);
@@ -788,6 +965,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
         previewAuthor.textContent = item.author;
         previewTimestamp.textContent = item.time;
         previewNumber.textContent = `#${item.num} / ${GLOBAL_MAX}`;
+        updatePreviewImageSlot(item.imageThumb || null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
 
@@ -1078,6 +1256,9 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
     projectTitle.disabled = true;
     projectDescription.disabled = true;
     projectAuthor.disabled = true;
+    if (projectImage) projectImage.disabled = true;
+    if (btnChooseImage) btnChooseImage.disabled = true;
+    if (btnClearImage) btnClearImage.disabled = true;
     btnSubmitIdea.disabled = true;
     btnSubmitIdea.textContent = label;
   }
@@ -1086,6 +1267,9 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
     projectTitle.disabled = false;
     projectDescription.disabled = false;
     projectAuthor.disabled = false;
+    if (projectImage) projectImage.disabled = false;
+    if (btnChooseImage) btnChooseImage.disabled = false;
+    if (btnClearImage) btnClearImage.disabled = false;
     btnSubmitIdea.disabled = false;
     btnSubmitIdea.textContent = 'Print';
   }
@@ -1158,7 +1342,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
     return lines;
   }
 
-  function renderLabelBitmap(title, description, handle, timeStr, printNum) {
+  function renderLabelBitmap(title, description, handle, timeStr, printNum, imageEl = null) {
     const W = 800;
     const H = 1200;
     const PAD = 48;
@@ -1193,13 +1377,31 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
     // 2. Description & details
     ctx.font = '400 33px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const descLines = wrapCanvasText(ctx, description, CONTENT_W);
-    const maxDescY = 990;
+    const maxDescY = imageEl ? 680 : 990;
     for (const line of descLines) {
       if (curY + 48 > maxDescY) break;
       if (line !== '') {
         ctx.fillText(line, PAD, curY);
       }
       curY += 50;
+    }
+
+    // Optional Floyd-Steinberg dithered image
+    if (imageEl) {
+      const imgTopY = curY + 14;
+      const maxImgBottom = 1018;
+      const availH = maxImgBottom - imgTopY;
+      const srcW = imageEl.naturalWidth || imageEl.width || 1;
+      const srcH = imageEl.naturalHeight || imageEl.height || 1;
+      if (availH >= 80 && srcW > 0 && srcH > 0) {
+        const scale = Math.min(CONTENT_W / srcW, availH / srcH);
+        const drawW = Math.max(16, Math.round(srcW * scale));
+        const drawH = Math.max(16, Math.round(srcH * scale));
+        const drawX = PAD + Math.round((CONTENT_W - drawW) / 2);
+        const drawY = imgTopY + Math.round((availH - drawH) / 2);
+        const ditheredCanvas = ditherImageToCanvas(imageEl, drawW, drawH);
+        ctx.drawImage(ditheredCanvas, drawX, drawY);
+      }
     }
 
     // Bottom divider
@@ -1268,10 +1470,28 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       return;
     }
 
+    const submittedImgEl = attachedImageEl;
+    const submittedImgThumb = attachedImageThumb;
+
     isSubmitting = true;
     btnSubmitIdea.disabled = true;
-    btnSubmitIdea.textContent = 'Sending to printer...';
+    btnSubmitIdea.textContent = submittedImgEl ? 'Reviewing image...' : 'Sending to printer...';
     setStatus('');
+
+    if (submittedImgEl) {
+      showFeedback('sending', 'AI Reviewing Image...', 'Checking your image before sending to the printer...');
+      const reviewResult = await (attachedImageReviewPromise || moderateImage(submittedImgEl, WORKER_BASE_URL));
+      if (!reviewResult.allowed) {
+        isSubmitting = false;
+        syncUIQuotaState();
+        const msg = reviewResult.reason || 'Image rejected by AI safety review.';
+        setStatus(msg, true);
+        showFeedback('error', 'Image Blocked by AI Review', msg);
+        return;
+      }
+      btnSubmitIdea.textContent = 'Sending to printer...';
+    }
+
     showFeedback('sending', 'Sending your idea...', 'Saving your message to Noah\'s printer queue...');
 
     try {
@@ -1300,6 +1520,10 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       if (roughLocation) {
         itemRecord.location = roughLocation;
       }
+      if (submittedImgThumb) {
+        itemRecord.imageThumb = submittedImgThumb;
+        fullResPrintImages.set(uid, submittedImgEl);
+      }
 
       // Save immediately to archive first so the idea is NEVER lost even if network/printer hiccups
       savedItems = mergeSavedItems(savedItems, [itemRecord]);
@@ -1314,6 +1538,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       previewAuthor.textContent = itemRecord.author;
       previewTimestamp.textContent = itemRecord.time;
       previewNumber.textContent = `#${itemRecord.num} / ${GLOBAL_MAX}`;
+      updatePreviewImageSlot(submittedImgThumb || null);
       if (previewHeaderLabel) {
         previewHeaderLabel.textContent = `Preview — Sent (#${itemRecord.num} / ${GLOBAL_MAX})`;
         previewHeaderLabel.classList.add('sent');
@@ -1346,6 +1571,7 @@ import { checkSubmissionProfanity } from './profanityFilter.js';
       titleCharCount.textContent = '0/80';
       descCharCount.textContent = '0/500';
       authorCharCount.textContent = '0/35';
+      clearAttachedImage(false);
 
       // Show clear confirmation on the button for 2.5s so they know their click registered
       btnSubmitIdea.classList.add('success-state');

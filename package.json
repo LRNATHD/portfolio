@@ -12,11 +12,14 @@
     "vite": "^6.3.0"
   },
   "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "buffer": "^6.0.3",
     "front-matter": "^4.0.2",
     "highlight.js": "^11.11.0",
     "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
     "marked": "^15.0.0",
+    "nsfwjs": "^4.3.0",
     "obscenity": "^0.4.6"
   }
 }

@@ -179,6 +179,63 @@ textarea {
   line-height: 1.5;
 }
 
+.label-opt {
+  color: #52525b;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.image-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.secondary-btn {
+  background: #000000;
+  color: #d4d4d8;
+  border: 1px solid #27272a;
+  border-radius: 4px;
+  padding: 0.48rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.825rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  border-color: #71717a;
+  color: #ffffff;
+}
+
+.secondary-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.secondary-btn.hidden {
+  display: none;
+}
+
+.image-file-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: #71717a;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-note {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: #71717a;
+}
+
 .submit-btn {
   margin-top: 0.25rem;
   background: #e4e4e7;
@@ -356,12 +413,43 @@ textarea {
 
 .label-desc {
   flex: 1;
+  min-height: 0;
   font-size: 0.875rem;
   line-height: 1.5;
   color: #d4d4d8;
   word-break: break-word;
   white-space: pre-wrap;
   overflow-y: auto;
+}
+
+.label-card.has-image .label-desc {
+  flex: 0 1 auto;
+  max-height: 34%;
+}
+
+.label-image-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #18181b;
+  border-radius: 2px;
+  background: #ffffff;
+  padding: 4px;
+}
+
+.label-image-wrap.hidden {
+  display: none;
+}
+
+.label-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+  image-rendering: pixelated;
 }
 
 .label-footer {

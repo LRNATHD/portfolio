@@ -41,7 +41,7 @@
           <input
             type="text"
             id="projectTitle"
-            placeholder="Toaster that catapults toast onto your plate"
+            placeholder="Project title"
             maxlength="80"
             autocomplete="off"
             required
@@ -56,7 +56,7 @@
           <textarea
             id="projectDescription"
             rows="6"
-            placeholder="Finds your plate on the table and launches the toast right onto it when it's done."
+            placeholder="Write a short description of your project idea..."
             maxlength="500"
             required
           ></textarea>
@@ -76,6 +76,20 @@
           />
         </div>
 
+        <div class="field">
+          <div class="field-head">
+            <label for="projectImage">Image <span class="label-opt">(optional)</span></label>
+            <span id="imageLimitCount" class="count">0/1</span>
+          </div>
+          <div class="image-picker-row">
+            <input type="file" id="projectImage" accept="image/*" class="hidden-file-input" />
+            <button type="button" id="btnChooseImage" class="secondary-btn">Choose image</button>
+            <button type="button" id="btnClearImage" class="secondary-btn hidden">Remove</button>
+            <span id="imageFileMeta" class="image-file-meta">None attached</span>
+          </div>
+          <p class="field-note">If you attach an image, an AI checks it before printing (only blocks the most vile stuff).</p>
+        </div>
+
         <button type="submit" id="btnSubmitIdea" class="submit-btn">Print</button>
         <p id="statusMsg" class="status-msg"></p>
 
@@ -91,9 +105,12 @@
       <div class="preview-col">
         <div class="preview-label" id="previewHeaderLabel">Preview</div>
         <div class="label-card" id="thermalPreviewCard">
-          <div class="label-title" id="previewTitle">Toaster that catapults toast onto your plate</div>
+          <div class="label-title" id="previewTitle">Project title</div>
           <div class="label-divider"></div>
-          <div class="label-desc" id="previewDescription">Finds your plate on the table and launches the toast right onto it when it's done.</div>
+          <div class="label-desc" id="previewDescription">Write a short description of your project idea...</div>
+          <div id="previewImageWrap" class="label-image-wrap hidden">
+            <img id="previewImage" class="label-image" alt="Attached thermal image preview" />
+          </div>
           <div class="label-divider"></div>
           <div class="label-footer">
             <div class="label-meta-left">
