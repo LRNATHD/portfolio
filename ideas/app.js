@@ -26,7 +26,7 @@ import { moderateImage } from './imageModeration.js';
   let attachedImageEl = null;
   let attachedImageThumb = null;
   let attachedImageReviewPromise = null;
-  let imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false };
+  let imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false, rotate: 0 };
   const fullResPrintImages = new Map(); // uid -> HTMLImageElement (in-memory for current session)
 
   const form = document.getElementById('ideaForm');
@@ -43,6 +43,7 @@ import { moderateImage } from './imageModeration.js';
   const imgBrightnessVal = document.getElementById('imgBrightnessVal');
   const imgContrast = document.getElementById('imgContrast');
   const imgContrastVal = document.getElementById('imgContrastVal');
+  const btnImgRotate = document.getElementById('btnImgRotate');
   const btnImgMode = document.getElementById('btnImgMode');
   const btnImgInvert = document.getElementById('btnImgInvert');
   const btnImgReset = document.getElementById('btnImgReset');
@@ -212,13 +213,17 @@ import { moderateImage } from './imageModeration.js';
       btnImgMode.textContent = imageEdit.mode === 'dither' ? 'Photo dither' : 'Sharp B&W';
       btnImgMode.classList.toggle('active', imageEdit.mode === 'dither');
     }
+    if (btnImgRotate) {
+      btnImgRotate.textContent = imageEdit.rotate ? `Rotate (${imageEdit.rotate}°)` : 'Rotate 90°';
+      btnImgRotate.classList.toggle('active', imageEdit.rotate !== 0);
+    }
     if (btnImgInvert) {
       btnImgInvert.classList.toggle('active', imageEdit.invert);
     }
   }
 
   function resetImageEditDefaults() {
-    imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false };
+    imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false, rotate: 0 };
     syncImageEditControlsUI();
   }
 
@@ -255,6 +260,7 @@ import { moderateImage } from './imageModeration.js';
     const contrast = Number.isFinite(opts.contrast) ? opts.contrast : 1.1;
     const mode = opts.mode || 'dither';
     const invert = !!opts.invert;
+    const rotateDeg = (((opts.rotate || 0) % 360) + 360) % 360;
 
     const c = document.createElement('canvas');
     c.width = w;
@@ -264,7 +270,18 @@ import { moderateImage } from './imageModeration.js';
     ctx.fillRect(0, 0, w, h);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(sourceImg, 0, 0, w, h);
+    if (rotateDeg !== 0) {
+      const swap = rotateDeg === 90 || rotateDeg === 270;
+      const drawW = swap ? h : w;
+      const drawH = swap ? w : h;
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.rotate((rotateDeg * Math.PI) / 180);
+      ctx.drawImage(sourceImg, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+    } else {
+      ctx.drawImage(sourceImg, 0, 0, w, h);
+    }
 
     const imgData = ctx.getImageData(0, 0, w, h);
     const data = imgData.data;
@@ -473,6 +490,15 @@ import { moderateImage } from './imageModeration.js';
         imageEdit.contrast = parseFloat(imgContrast.value) || 1.0;
         syncImageEditControlsUI();
         scheduleLivePreviewRender();
+      });
+    }
+
+    if (btnImgRotate) {
+      btnImgRotate.addEventListener('click', () => {
+        clearSentPreviewHighlight();
+        imageEdit.rotate = ((imageEdit.rotate || 0) + 90) % 360;
+        syncImageEditControlsUI();
+        renderLivePreviewCanvas();
       });
     }
 
@@ -1540,8 +1566,12 @@ import { moderateImage } from './imageModeration.js';
       const imgTopY = curY + 14;
       const maxImgBottom = 1020;
       const availH = maxImgBottom - imgTopY;
-      const srcW = imageEl.naturalWidth || imageEl.width || 1;
-      const srcH = imageEl.naturalHeight || imageEl.height || 1;
+      const rawW = imageEl.naturalWidth || imageEl.width || 1;
+      const rawH = imageEl.naturalHeight || imageEl.height || 1;
+      const rot = (((editOpts.rotate || 0) % 360) + 360) % 360;
+      const swap = rot === 90 || rot === 270;
+      const srcW = swap ? rawH : rawW;
+      const srcH = swap ? rawW : rawH;
       if (availH >= 80 && srcW > 0 && srcH > 0) {
         const scale = Math.min(CONTENT_W / srcW, availH / srcH);
         const drawW = Math.max(16, Math.round(srcW * scale));
