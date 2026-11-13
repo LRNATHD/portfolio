@@ -1,0 +1,72 @@
+CRITICAL CONSTRAINTS
+1. Thermal printhead is 203 DPI fixed pitch (800x1200 physical dots for 4x6 inch label).
+2. Display canvas coordinate system is 400x600 px (scale factor 2.0x to printhead).
+3. Preserve un-dithered high-resolution rawSrc for all images so scaling up recalculates dithering rather than stretching 1-bit dots.
+4. Recalculate Floyd-Steinberg error diffusion dynamically on resize and at 800x1200 on printhead render.
+5. Keep layer stack synchronized with DOM order, z-indexes, and canvas rendering order.
+6. Maintain plaintext format for this file without markdown.
+
+====
+RULES
+1. Always preserve rawSrc on image elements for dynamic redithering.
+2. Cap rawSrc max dimension at 1600px upon upload to prevent localStorage exhaustion while exceeding 800x1200 printhead resolution.
+3. Recalculate Floyd-Steinberg dithering on image resize completion and debounced during interactive drag.
+4. Render print canvas by drawing elements bottom-to-top according to layer z-order.
+5. Exclude hidden layers from printhead rendering and canvas interaction.
+6. Prevent dragging, resizing, or rotating locked layers on canvas.
+7. Mirror canvas selection state in the Inkscape layer view and vice versa.
+8. Store all layer attributes (name, locked, hidden, zIndex, rawSrc, isInverted) in localStorage draft persistence.
+
+====
+KEY INFO
+Property | Purpose | Default / Range
+CANVAS_WIDTH | Display canvas width in CSS pixels | 400
+CANVAS_HEIGHT | Display canvas height in CSS pixels | 600
+PRINT_WIDTH | NULLTONEX physical printhead dots | 800
+PRINT_HEIGHT | NULLTONEX physical printhead dots | 1200
+RAW_IMAGE_MAX_DIM | Max dimension for un-dithered raw image data | 1600
+SCALE_FACTOR | Print dots to canvas CSS pixels ratio | 2.0
+DITHER_TYPE | Error diffusion algorithm | Floyd-Steinberg
+SHORTCUT_RAISE | Bring forward one layer level | Ctrl+]
+SHORTCUT_LOWER | Send backward one layer level | Ctrl+[
+SHORTCUT_TOP | Bring to front (topmost layer) | Shift+Ctrl+]
+SHORTCUT_BOTTOM | Send to back (bottommost layer) | Shift+Ctrl+[
+SHORTCUT_DUP | Duplicate selected layer | Ctrl+D
+
+====
+COMMANDS
+npm run dev
+npm run build
+
+====
+TEMPLATES
+[DYNAMIC_DITHER_CALL]
+recalculateImageDithering(record);
+
+[LAYER_ROW_SCHEMA]
+{ id: string, name: string, type: 'text'|'image', locked: boolean, hidden: boolean, zIndex: number, rawSrc: string, isInverted: boolean }
+
+[PRINT_RENDER_LAYER]
+if (!el.hidden) { await drawImageElementToCanvas(ctx, el, scaleX, scaleY); }
+
+====
+TROUBLESHOOTING
+SYMPTOM: Images show chunky enlarged pixel blocks when scaled up.
+CAUSE: Dithering was calculated once at upload and the 1-bit low-res bitmap was stretched by CSS/canvas.
+FIX: Retain high-res rawSrc and invoke recalculateImageDithering at new target dimensions.
+
+SYMPTOM: Hidden layer still prints to thermal paper.
+CAUSE: Print render loop ignores record.hidden flag.
+FIX: Check if (!el.hidden) before drawing element in renderStickerToDataUrl.
+
+SYMPTOM: Changes to realtalk in realtalk-printer-system do not appear in portfolio web dev server.
+CAUSE: RealTalk is bundled and served from portfolio/realtalk via Vite.
+FIX: Synchronize index.html, style.css, and app.js into portfolio/realtalk.
+
+====
+CHECKLIST
+[x] Create portfolio/realtalk/ai.txt
+[x] Synchronize index.html to portfolio/realtalk
+[x] Synchronize style.css to portfolio/realtalk
+[x] Synchronize app.js to portfolio/realtalk
+[x] Validate Vite build in portfolio

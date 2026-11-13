@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>RealTalk // Transmission Terminal</title>
+  <meta name="description" content="Design and manifest physical artifacts, notes, and graphics directly onto Noah's desk in real time." />
+  <script>
+    (function () {
+      try {
+        var h = window.location.hostname;
+        var isLocal = h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || window.location.protocol === 'file:';
+        if (!isLocal) {
+          window.stop && window.stop();
+          document.documentElement.innerHTML = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#fff;color:#111;padding:48px;max-width:600px;margin:0 auto;line-height:1.5;}h1{font-size:24px;margin-bottom:8px;}p{color:#555;font-size:15px;}hr{border:none;border-top:1px solid #eee;margin:24px 0;}small{color:#888;font-size:12px;}</style></head><body><h1>404 Not Found</h1><p>The requested URL was not found on this server.</p><hr><small>Apache Server at ' + (h || 'noahsmith.dev') + ' Port 443</small></body></html>';
+          throw new Error('Access restricted: local machine only');
+        }
+      } catch (e) {
+        if (e.message && e.message.indexOf('Access restricted') !== -1) throw e;
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app-root">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="app-title">RealTalk</h1>
+        <button id="btnBridgeStatus" class="bridge-status-pill" type="button" title="Click to open Console & inspect node status">
+          <span class="status-dot"></span>
+          <span id="bridgeStatusText">Desk Link</span>
+        </button>
+      </div>
+      <div class="header-right">
+        <button id="btnOpenControlPanel" class="header-btn" type="button" title="Desk Terminal Console">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Console</span>
+        </button>
+        <button id="btnToggleLayers" class="header-btn" type="button" title="View & manage layers (Inkscape style)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span>Layers</span>
+          <span id="layersBadge" class="history-count-badge">0</span>
+        </button>
+        <button id="btnToggleHistory" class="header-btn" type="button" title="View past transmissions">
+          <span>Transmissions</span>
+          <span id="historyBadge" class="history-count-badge">0</span>
+        </button>
+        <button id="btnPrint" class="btn-print" title="Materialize physically on Noah's desk">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v13m0 0l-4-4m4 4l4-4"></path><rect x="4" y="16" width="16" height="6" rx="2"></rect></svg>
+          <span class="btn-label" id="btnPrintLabel">Transmit to Desk</span>
+        </button>
+        <button id="btnPrintAll" class="btn-print-all hidden" title="Transmit all cards in this sequence to Noah's desk" type="button">
+          <span>Transmit All (<span id="lblPrintAllCount">1</span>)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Toolbar for iPad & Desktop -->
+    <nav class="canvas-toolbar">
+      <button id="btnAddText" class="tool-btn" type="button">
+        <span class="tool-text">+ Text</span>
+      </button>
+
+      <button id="btnUploadImage" class="tool-btn" type="button" title="Upload an image or photo">
+        <span class="tool-text">+ Image</span>
+      </button>
+      <input type="file" id="imageInput" accept="image/*" style="display: none;" />
+
+      <button id="btnPasteImage" class="tool-btn" type="button" title="Paste from clipboard">
+        <span class="tool-text">Paste</span>
+      </button>
+
+      <button id="btnBgColor" class="tool-btn" type="button" title="Toggle background color (White / Black)">
+        <span class="tool-text" id="bgColorText">Bg: White</span>
+      </button>
+
+      <div class="toolbar-separator"></div>
+
+      <button id="btnClear" class="tool-btn danger" type="button" title="Clear canvas">
+        <span class="tool-text">Clear</span>
+      </button>
+    </nav>
+
+    <!-- Workspace Layout (Stage + History Sidebar) -->
+    <div class="workspace-layout">
+      <!-- Canvas Workspace Area -->
+      <main class="canvas-workspace">
+        <!-- Multi-Card Sequence Navigation Bar -->
+        <div class="sticker-strip-bar" id="stickerStripBar">
+          <div class="sticker-strip-left">
+            <span class="strip-label">Sequence:</span>
+            <div class="sticker-tabs" id="stickerTabs">
+              <!-- Dynamically populated: [ 1 ] [ 2 ] [ 3 ] ... -->
+            </div>
+            <button id="btnAddSticker" class="btn-strip-action primary" type="button" title="Add a new card to this sequence">
+              <span>+ Add Card</span>
+            </button>
+          </div>
+
+          <div class="sticker-strip-right">
+            <button id="btnDuplicateSticker" class="btn-strip-action" type="button" title="Duplicate active card">
+              <span>Duplicate</span>
+            </button>
+            <button id="btnDeleteSticker" class="btn-strip-action danger" type="button" title="Delete active card">
+              <span>Delete</span>
+            </button>
+            <div class="strip-separator"></div>
+            <button id="btnToggleRollView" class="btn-strip-action" type="button" title="Toggle continuous stream view">
+              <span id="lblRollViewMode">Stream View</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+          <!-- Physical Artifact Stage -->
+          <div class="thermal-stage" id="stage" data-sticker-idx="0">
+            <!-- Active elements container -->
+            <div id="elementsContainer" class="elements-layer"></div>
+
+            <!-- Bottom subtle corner watermark -->
+            <div class="stage-watermark unselectable">noahsmith.dev // realtalk terminal</div>
+          </div>
+        </div>
+
+        <!-- Quick Tips Hint -->
+        <div class="workspace-hint">
+          <span>Click canvas to add text &bull; Paste images with <b>Ctrl+V</b> &bull; Drag, resize &amp; rotate &bull; <b>Backspace</b> to delete</span>
+        </div>
+      </main>
+
+      <!-- Inkscape Layers & Transmissions Studio Sidebar -->
+      <aside class="history-sidebar studio-sidebar" id="historySidebar">
+        <!-- Tab Navigation Bar -->
+        <div class="sidebar-tab-bar">
+          <button id="tabLayers" class="sidebar-tab active" type="button" title="Inkscape Layers & Objects">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            <span>Layers</span>
+            <span id="tabLayersCount" class="tab-badge">0</span>
+          </button>
+          <button id="tabHistory" class="sidebar-tab" type="button" title="Past Transmissions History">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>Transmissions</span>
+            <span id="tabHistoryCount" class="tab-badge">0</span>
+          </button>
+          <button id="btnSidebarClose" class="btn-sidebar-close" type="button" title="Close drawer">&times;</button>
+        </div>
+
+        <!-- Inkscape Layers & Objects Panel -->
+        <div class="sidebar-panel-view active" id="layersPanelView">
+          <!-- Inkscape Action Toolbar: Top, Raise, Lower, Bottom, Duplicate, Delete -->
+          <div class="layers-actions-bar">
+            <div class="layer-actions-group">
+              <button id="btnLayerTop" class="layer-action-btn" type="button" title="Bring to Front (Shift+Ctrl+])">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7M5 5h14"/></svg>
+              </button>
+              <button id="btnLayerUp" class="layer-action-btn" type="button" title="Raise Layer (Ctrl+])">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+              <button id="btnLayerDown" class="layer-action-btn" type="button" title="Lower Layer (Ctrl+[)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+              </button>
+              <button id="btnLayerBottom" class="layer-action-btn" type="button" title="Send to Back (Shift+Ctrl+[)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7M5 19h14"/></svg>
+              </button>
+            </div>
+            <div class="layer-actions-group">
+              <button id="btnLayerDuplicate" class="layer-action-btn" type="button" title="Duplicate Layer (Ctrl+D)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+              <button id="btnLayerDelete" class="layer-action-btn danger" type="button" title="Delete Layer (Delete)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Layers Stack List (Top of list = Topmost element) -->
+          <div class="layers-list" id="layersContainer">
+            <!-- Dynamically populated from elements array -->
+          </div>
+
+          <!-- Quick Add Layer Controls at Bottom of Panel -->
+          <div class="layers-bottom-bar">
+            <button id="btnLayerAddText" class="btn-layer-add" type="button" title="Add new text layer">
+              <span>+ Text</span>
+            </button>
+            <button id="btnLayerAddImage" class="btn-layer-add" type="button" title="Add new image layer">
+              <span>+ Image</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Transmissions History Panel -->
+        <div class="sidebar-panel-view" id="historyPanelView" style="display: none;">
+          <button id="btnNewCanvasSidebar" class="btn-new-canvas" type="button">
+            <span>+ New Blank Canvas</span>
+          </button>
+          <div class="history-list" id="historyContainer">
+            <!-- Dynamically populated from localStorage -->
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- Contextual Element Inspector / Floating Controls -->
+    <div id="elementControls" class="element-controls hidden">
+      <button id="btnSizeDown" class="control-btn" title="Decrease size">A-</button>
+      <button id="btnSizeUp" class="control-btn" title="Increase size">A+</button>
+      <div class="control-divider"></div>
+      <button id="btnTextColor" class="control-btn text-btn" title="Toggle text color (Black / White)">
+        <span id="textColorLabel">Text: Black</span>
+      </button>
+      <button id="btnInvertImage" class="control-btn text-btn" title="Invert image colors">
+        <span>Invert</span>
+      </button>
+      <div class="control-divider"></div>
+      <button id="btnRotateCCW" class="control-btn" title="Rotate counter-clockwise 15°">&#8634;</button>
+      <span id="rotateDegreeBadge" class="control-btn text-btn" title="Current rotation">0°</span>
+      <button id="btnRotateCW" class="control-btn" title="Rotate clockwise 15°">&#8635;</button>
+      <button id="btnRotate90" class="control-btn" title="Rotate 90°">90°</button>
+      <div class="control-divider"></div>
+      <button id="btnAlignLeft" class="control-btn" title="Align left">&#8676;</button>
+      <button id="btnAlignCenter" class="control-btn" title="Align center">&#8596;</button>
+      <button id="btnAlignRight" class="control-btn" title="Align right">&#8677;</button>
+      <div class="control-divider"></div>
+      <button id="btnDeleteElem" class="control-btn danger" title="Delete element">&#10005;</button>
+    </div>
+
+    <!-- Hardware Control Panel Modal Overlay -->
+    <div id="controlPanelModal" class="control-panel-modal hidden">
+      <div class="control-panel-card">
+        <div class="panel-header">
+          <div class="panel-header-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
+            <h3>Desk Physical Node Console</h3>
+          </div>
+          <button id="btnControlPanelClose" class="panel-close-btn" type="button">&times;</button>
+        </div>
+
+        <div class="panel-body">
+          <!-- Diagnostics Grid -->
+          <div class="panel-grid">
+            <!-- Mobile Uplink Relay Card -->
+            <div class="panel-tile">
+              <div class="tile-header">
+                <span class="tile-label">Mobile Uplink Relay</span>
+                <span id="panelPhoneBadge" class="tile-status-badge badge-checking">Checking...</span>
+              </div>
+              <div class="tile-metrics">
+                <div class="metric-row">
+                  <span class="metric-key">Uplink Ping:</span>
+                  <span id="panelPhoneLastSeen" class="metric-val">--</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-key">Relay Power:</span>
+                  <span id="panelPhoneBattery" class="metric-val">--</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Desk Physical Node Card -->
+            <div class="panel-tile">
+              <div class="tile-header">
+                <span class="tile-label">Desk Physical Node</span>
+                <span id="panelPrinterBadge" class="tile-status-badge badge-checking">Checking...</span>
+              </div>
+              <div class="tile-metrics">
+                <div class="metric-row">
+                  <span class="metric-key">Wireless Link:</span>
+                  <span id="panelPrinterState" class="metric-val">--</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-key">Power Mode:</span>
+                  <span id="panelPowerState" class="metric-val">Auto-Standby (90s idle)</span>
+                </div>
+                <div class="metric-row node-addr-row">
+                  <span class="metric-key">Target MAC:</span>
+                  <div class="node-mac-control">
+                    <input type="text" id="inputPrinterAddress" class="node-mac-input" value="66:32:89:D2:0A:46" placeholder="00:00:00:00:00:00" spellcheck="false" maxlength="20" />
+                    <button type="button" id="btnSavePrinterAddress" class="btn-node-mac-save" title="Save MAC to Desk Node">Set</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Remote Commands Section -->
+          <div class="panel-actions-section">
+            <div class="section-title">Terminal Controls</div>
+            <div class="panel-action-buttons">
+              <button id="btnRemoteReconnect" class="btn-action primary" type="button" title="Wake desk printer and establish link">
+                <span>Wake &amp; Link</span>
+              </button>
+              <button id="btnRemoteDisconnect" class="btn-action" type="button" title="Disconnect and put printer into low-power standby">
+                <span>Put In Standby</span>
+              </button>
+              <button id="btnRemotePrintTest" class="btn-action" type="button" title="Print a hardware test/calibration label">
+                <span>Transmit Calibration</span>
+              </button>
+              <button id="btnRemoteFetchQueue" class="btn-action" type="button" title="Force check and print any pending quotes in cloud">
+                <span>Flush Pending Queue</span>
+              </button>
+              <button id="btnRefreshBridgeStatus" class="btn-action secondary" type="button" title="Sync real-time telemetry from node">
+                <span>Sync Telemetry</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Physical Engine Settings Section -->
+          <div class="panel-settings-section">
+            <div class="section-title">Physical Engine Calibration</div>
+            <div class="settings-grid">
+              <div class="setting-item">
+                <label for="selectPrintSpeed" class="setting-label">Feed Velocity</label>
+                <select id="selectPrintSpeed" class="setting-select">
+                  <option value="1.5" selected>1.5 ips (Deep Precision - Recommended)</option>
+                  <option value="2.0">2.0 ips (Standard Velocity)</option>
+                  <option value="3.0">3.0 ips (Rapid Feed)</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label for="selectPrintDensity" class="setting-label">Exposure Density</label>
+                <select id="selectPrintDensity" class="setting-select">
+                  <option value="10">10 (Subtle Exposure)</option>
+                  <option value="12" selected>12 (High Contrast - Recommended)</option>
+                  <option value="14">14 (Deep Saturation)</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label for="selectPrintPolarity" class="setting-label">Surface Polarity</label>
+                <select id="selectPrintPolarity" class="setting-select">
+                  <option value="standard" selected>Positive (Substrate White, Ink Black)</option>
+                  <option value="inverted">Negative (Substrate Burn Inversion)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Log -->
+          <div class="panel-log-section">
+            <div class="log-header">
+              <span class="section-title">Node Telemetry &amp; Stream</span>
+              <span id="panelLogTime" class="log-time">--</span>
+            </div>
+            <div id="panelLogBox" class="log-box">
+              <div class="log-entry">Awaiting uplink telemetry beacon...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Print Status Modal Overlay -->
+    <div id="statusModal" class="status-modal hidden">
+      <div class="modal-card">
+        <div class="modal-indicator">
+          <div class="spinner" id="modalSpinner"></div>
+        </div>
+        <h3 id="modalTitle" class="modal-title">Transmitting to Desk...</h3>
+        <p id="modalDesc" class="modal-desc">Synthesizing physical dot matrix and dispatching to desk node.</p>
+
+        <!-- Pipeline Step Indicator -->
+        <div class="pipeline-track" id="pipelineTrack">
+          <div class="pipeline-step" id="stepRender">
+            <div class="step-dot"></div>
+            <span class="step-name">Synthesize</span>
+          </div>
+          <div class="pipeline-line" id="lineRenderQueue"></div>
+          <div class="pipeline-step" id="stepQueue">
+            <div class="step-dot"></div>
+            <span class="step-name">Queue</span>
+          </div>
+          <div class="pipeline-line" id="lineQueueBridge"></div>
+          <div class="pipeline-step" id="stepBridge">
+            <div class="step-dot"></div>
+            <span class="step-name">Relay</span>
+          </div>
+          <div class="pipeline-line" id="lineBridgePrint"></div>
+          <div class="pipeline-step" id="stepPrint">
+            <div class="step-dot"></div>
+            <span class="step-name">Manifest</span>
+          </div>
+        </div>
+
+        <!-- Disconnection Warning Alert Box (hidden by default) -->
+        <div id="modalAlertBox" class="modal-alert-box hidden">
+          <div class="alert-icon-wrap">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          </div>
+          <div class="alert-content">
+            <div id="modalAlertTitle" class="alert-title">Desk Node Standing By</div>
+            <div id="modalAlertDesc" class="alert-desc">Uplink relay is active, but wireless connection to the desk physical node is standing by.</div>
+            <div class="alert-actions">
+              <button id="btnModalReconnect" class="btn-alert-action primary" type="button">Reconnect Node</button>
+              <button id="btnModalPrintAnyway" class="btn-alert-action secondary" type="button">Queue Transmission</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-progress-track">
+          <div id="modalProgressBar" class="modal-progress-bar"></div>
+        </div>
+
+        <div class="modal-footer">
+          <span id="modalJobId" class="modal-job-id">Job ID: &mdash;</span>
+          <button id="modalCloseBtn" class="modal-btn-close hidden" type="button">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "html2canvas": "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm"
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
