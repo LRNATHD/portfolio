@@ -670,13 +670,20 @@ import { moderateImage } from './imageModeration.js';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
 
-    // 1. Title
-    ctx.font = '600 43px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    // 1. Title (auto-fit slightly if a single line barely overflows to avoid 1-word orphans)
+    let titleFontSize = 43;
+    ctx.font = `600 ${titleFontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    const singleLineTitleWidth = !String(title).includes('\n') ? ctx.measureText(title).width : Infinity;
+    if (singleLineTitleWidth > CONTENT_W && singleLineTitleWidth <= CONTENT_W * 1.15) {
+      titleFontSize = Math.max(36, Math.floor((titleFontSize * CONTENT_W) / singleLineTitleWidth));
+      ctx.font = `600 ${titleFontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    }
     const titleLines = wrapCanvasText(ctx, title, CONTENT_W);
+    const titleLineHeight = Math.round(titleFontSize * 1.3);
     let curY = PAD;
     for (const line of titleLines) {
       ctx.fillText(line, PAD, curY);
-      curY += 56;
+      curY += titleLineHeight;
     }
 
     // Top divider
