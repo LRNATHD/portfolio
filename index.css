@@ -10,7 +10,7 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #000;
   color: #e4e4e7;
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -19,7 +19,8 @@ body {
 }
 
 .page {
-  max-width: 480px;
+  width: 100%;
+  max-width: 640px;
   text-align: left;
 }
 
@@ -46,4 +47,68 @@ a {
 
 a:hover {
   border-color: #e4e4e7;
+}
+
+.featured-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.75rem;
+}
+
+.featured-card {
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0c;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.featured-card:hover {
+  border-color: #52525b;
+  background: #111114;
+  transform: translateY(-2px);
+}
+
+.featured-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  overflow: hidden;
+  border-bottom: 1px solid #27272a;
+}
+
+.featured-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.featured-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+}
+
+.featured-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #e4e4e7;
+  letter-spacing: -0.01em;
+}
+
+.featured-desc {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #8b8b96;
+}
+
+@media (max-width: 540px) {
+  .featured-links {
+    grid-template-columns: 1fr;
+  }
 }
