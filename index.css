@@ -74,7 +74,7 @@ a:hover {
 
 .featured-thumb {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   background: #000;
   overflow: hidden;
   border-bottom: 1px solid #27272a;
@@ -83,7 +83,7 @@ a:hover {
 .featured-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
