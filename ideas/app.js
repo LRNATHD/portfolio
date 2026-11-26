@@ -1,6 +1,3 @@
-import { checkSubmissionProfanity } from './profanityFilter.js';
-import { moderateImage } from './imageModeration.js';
-
 (function () {
   'use strict';
 
@@ -13,14 +10,13 @@ import { moderateImage } from './imageModeration.js';
 
   let globalTotalPrints = 0;
   let globalPrintsRemaining = GLOBAL_MAX;
-  let postponeUntil = 0; // 0 = immediate, -1 = hold indefinitely, >0 = epoch ms
+  let postponeUntil = -1; // 0 = immediate, -1 = hold indefinitely (default), >0 = epoch ms
   let isSubmitting = false;
   let showingSentPreview = false;
 
   // Uploaded image state (1 max)
   let attachedImageEl = null;
   let attachedImageThumb = null;
-  let attachedImageReviewPromise = null;
   let imageEdit = { brightness: 0, contrast: 1.1, mode: 'dither', invert: false, rotate: 0 };
 
   const form = document.getElementById('ideaForm');
@@ -137,7 +133,6 @@ import { moderateImage } from './imageModeration.js';
   function clearAttachedImage(updatePreview = true) {
     attachedImageEl = null;
     attachedImageThumb = null;
-    attachedImageReviewPromise = null;
     resetImageEditDefaults();
     if (projectImage) projectImage.value = '';
     if (imageFileMeta) imageFileMeta.textContent = 'None attached';
@@ -317,9 +312,6 @@ import { moderateImage } from './imageModeration.js';
       if (btnClearImage) btnClearImage.classList.remove('hidden');
       if (imageEditPanel) imageEditPanel.classList.remove('hidden');
       renderLivePreviewCanvas();
-
-      // Pre-check image silently in background
-      attachedImageReviewPromise = moderateImage(img, WORKER_BASE_URL);
     } catch (err) {
       clearAttachedImage();
       setStatus(err.message || 'Could not load image.', true);
@@ -781,20 +773,6 @@ import { moderateImage } from './imageModeration.js';
       return;
     }
 
-    const filterResult = checkSubmissionProfanity({
-      title: titleVal,
-      description: descVal,
-      author: authorVal
-    });
-    if (!filterResult.clean) {
-      setStatus(filterResult.message, true);
-      showFeedback('error', 'Message Blocked by Content Filter', filterResult.message);
-      if (filterResult.field === 'title') projectTitle.focus();
-      else if (filterResult.field === 'description') projectDescription.focus();
-      else if (filterResult.field === 'author') projectAuthor.focus();
-      return;
-    }
-
     const submittedImgEl = attachedImageEl;
     const submittedImgThumb = attachedImageThumb;
     const submittedImgEdit = { ...imageEdit };
@@ -804,18 +782,6 @@ import { moderateImage } from './imageModeration.js';
     btnSubmitIdea.textContent = 'Sending to printer...';
     setStatus('');
     showFeedback('sending', 'Sending your idea...', 'Saving your message to Noah\'s printer queue...');
-
-    if (submittedImgEl) {
-      const reviewResult = await (attachedImageReviewPromise || moderateImage(submittedImgEl, WORKER_BASE_URL));
-      if (!reviewResult.allowed) {
-        isSubmitting = false;
-        syncUIQuotaState();
-        const msg = reviewResult.reason || 'This image cannot be printed. Please choose a different image.';
-        setStatus(msg, true);
-        showFeedback('error', 'Image Not Allowed', msg);
-        return;
-      }
-    }
 
     try {
       await fetchRemoteQuotaState();
